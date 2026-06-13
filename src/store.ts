@@ -24,10 +24,15 @@ interface ZineState {
   selectedTextId: string | null;
   /** Bumped whenever the document or assets change, to drive autosave. */
   revision: number;
+  /** Id of the draft currently being edited (null until loaded). */
+  currentDraftId: string | null;
 
   // --- lifecycle ---
   hydrate: (doc: Zine, assets: Asset[]) => void;
   newProject: () => void;
+  setCurrentDraftId: (id: string | null) => void;
+  /** Replace the whole document + assets (used by undo/redo). */
+  replaceState: (doc: Zine, assets: Asset[]) => void;
 
   // --- document-level ---
   setTitle: (title: string) => void;
@@ -104,6 +109,7 @@ export const useZine = create<ZineState>((set) => ({
   selectedCellIndex: 0,
   selectedTextId: null,
   revision: 0,
+  currentDraftId: null,
 
   hydrate: (doc, assets) =>
     set({
@@ -120,6 +126,18 @@ export const useZine = create<ZineState>((set) => ({
       doc: createZine(),
       assets: [],
       selectedPageIndex: 0,
+      selectedCellIndex: 0,
+      selectedTextId: null,
+      revision: s.revision + 1,
+    })),
+
+  setCurrentDraftId: (id) => set({ currentDraftId: id }),
+
+  replaceState: (doc, assets) =>
+    set((s) => ({
+      doc,
+      assets,
+      selectedPageIndex: Math.min(s.selectedPageIndex, doc.pages.length - 1),
       selectedCellIndex: 0,
       selectedTextId: null,
       revision: s.revision + 1,

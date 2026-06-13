@@ -32,8 +32,13 @@ proper saddle-stitch booklet so you can choose your own page count.
 - **Print-ready PDF export** with correct saddle-stitch imposition: pages are
   arranged two-up on landscape sheets in fold order. Choose draft/standard/high
   quality and a fold-guide line.
-- **Runs entirely in the browser.** Your images never leave your machine. Work
-  autosaves locally (IndexedDB); you can also Save/Open a project file.
+- **Undo / redo** for every edit (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z), with rapid
+  changes like dragging coalesced into single steps.
+- **Multiple drafts.** Keep several zines in the browser, switch between them,
+  rename, duplicate, and delete. The current draft autosaves as you work.
+- **Runs entirely in the browser.** Your images never leave your machine.
+  Drafts are stored locally (IndexedDB); you can also export/import a project
+  file for backup or sharing.
 
 ## Printing your zine
 
@@ -81,7 +86,8 @@ src/
     pdf.ts            # PDF export (pdf-lib + fontkit), loaded on demand
     fonts.ts          # font registry (standard + embedded)
     image.ts          # image import / downscale / encode
-    storage.ts        # IndexedDB autosave
+    storage.ts        # IndexedDB draft storage
+    history.ts        # undo/redo controller
   components/         # editor UI (page list, canvas, inspector, export)
 ```
 
