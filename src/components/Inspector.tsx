@@ -565,39 +565,39 @@ function TextControls({
           onChange={(v) => onChange({ width: v })}
         />
       </Field>
-      <Field label="Center on page">
-        <Button
-          variant="ghost"
-          className="!px-2"
-          title="Center horizontally"
-          onClick={() => onChange({ x: clamp01((1 - block.width) / 2) })}
-        >
-          ↔
-        </Button>
-        <Button
-          variant="ghost"
-          className="!px-2"
-          title="Center vertically"
-          onClick={() =>
-            onChange({ y: clamp01((1 - textHeightFraction(block)) / 2) })
-          }
-        >
-          ↕
-        </Button>
-        <Button
-          variant="ghost"
-          className="!px-2"
-          title="Center both ways"
-          onClick={() =>
-            onChange({
-              x: clamp01((1 - block.width) / 2),
-              y: clamp01((1 - textHeightFraction(block)) / 2),
-            })
-          }
-        >
-          ＋
-        </Button>
-      </Field>
+      <div>
+        <span className="text-xs text-neutral-400">Center on page</span>
+        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+          <Button
+            variant="ghost"
+            title="Center horizontally"
+            onClick={() => onChange({ x: clamp01((1 - block.width) / 2) })}
+          >
+            ↔ Across
+          </Button>
+          <Button
+            variant="ghost"
+            title="Center vertically"
+            onClick={() =>
+              onChange({ y: clamp01((1 - textHeightFraction(block)) / 2) })
+            }
+          >
+            ↕ Down
+          </Button>
+          <Button
+            variant="ghost"
+            title="Center both ways"
+            onClick={() =>
+              onChange({
+                x: clamp01((1 - block.width) / 2),
+                y: clamp01((1 - textHeightFraction(block)) / 2),
+              })
+            }
+          >
+            Both
+          </Button>
+        </div>
+      </div>
       <Field label="Rotation">
         <Slider
           value={block.rotation}
