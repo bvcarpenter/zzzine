@@ -140,7 +140,7 @@ async function renderPageImage(
     page.gutter / PAGE_HEIGHT_PT,
   );
   const filled = page.cells
-    .map((cell, i) => ({ cell, rect: rects[i] }))
+    .map((cell, i) => ({ cell, rect: rects[i], i }))
     .filter((x) => x.cell && x.rect);
   if (filled.length === 0) return null;
 
@@ -155,7 +155,7 @@ async function renderPageImage(
   ctx.fillStyle = page.background;
   ctx.fillRect(0, 0, w, h);
 
-  for (const { cell, rect } of filled) {
+  for (const { cell, rect, i } of filled) {
     const asset = assetById.get(cell!.assetId);
     if (!asset) continue;
     let el = imgCache.get(asset.id);
@@ -163,12 +163,23 @@ async function renderPageImage(
       el = await loadImage(asset.dataUrl);
       imgCache.set(asset.id, el);
     }
+    const cw = rect.w * w;
+    const ch = rect.h * h;
     ctx.save();
     ctx.translate(rect.x * w, rect.y * h);
-    drawImageSlot(ctx, el, asset.width, asset.height, cell!, {
-      width: rect.w * w,
-      height: rect.h * h,
-    });
+    if (page.span && i === 0) {
+      // One half of a spread-spanning image: fit to a double-width slot.
+      if (page.span === "right") ctx.translate(-cw, 0);
+      drawImageSlot(ctx, el, asset.width, asset.height, cell!, {
+        width: cw * 2,
+        height: ch,
+      });
+    } else {
+      drawImageSlot(ctx, el, asset.width, asset.height, cell!, {
+        width: cw,
+        height: ch,
+      });
+    }
     ctx.restore();
   }
 

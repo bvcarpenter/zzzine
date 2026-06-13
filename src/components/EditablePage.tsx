@@ -27,6 +27,7 @@ interface CellProps {
   width: number;
   height: number;
   selected: boolean;
+  spanSide: "left" | "right" | null;
 }
 
 function CellView({
@@ -39,6 +40,7 @@ function CellView({
   width,
   height,
   selected,
+  spanSide,
 }: CellProps) {
   const focusCell = useZine((s) => s.focusCell);
   const updateCellImage = useZine((s) => s.updateCellImage);
@@ -59,7 +61,9 @@ function CellView({
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!pan.current || !image) return;
-    const dx = (e.clientX - pan.current.startX) / width;
+    // A spanning image is fit to a double-width slot, so pan is half as fast.
+    const denomX = spanSide ? width * 2 : width;
+    const dx = (e.clientX - pan.current.startX) / denomX;
     const dy = (e.clientY - pan.current.startY) / height;
     updateCellImage(pageIndex, cellIndex, {
       offsetX: clamp(pan.current.baseX + dx, -1.5, 1.5),
@@ -109,6 +113,7 @@ function CellView({
         asset={asset}
         width={width}
         height={height}
+        spanSide={spanSide}
       />
       {!image && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-400/70">
@@ -174,6 +179,7 @@ export function EditablePage({ index, width, height }: Props) {
           width={r.w * width}
           height={r.h * height}
           selected={active && ci === selectedCellIndex}
+          spanSide={ci === 0 ? (page.span ?? null) : null}
         />
       ))}
 

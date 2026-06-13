@@ -44,6 +44,7 @@ export function PageThumbnail({ page, assets, width }: Props) {
               asset={asset}
               width={r.w * width}
               height={r.h * height}
+              spanSide={ci === 0 ? (page.span ?? null) : null}
             />
           </div>
         );

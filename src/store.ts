@@ -12,6 +12,7 @@ import { createPage, createTextBlock, createZine } from "./lib/factory";
 import { MAX_PAGES, MIN_PAGES } from "./lib/constants";
 import { roundUpToSheet } from "./lib/imposition";
 import { cellCount } from "./lib/layout";
+import { buildSpreads } from "./lib/spreads";
 import { migrateZine } from "./lib/migrate";
 
 interface ZineState {
@@ -44,6 +45,8 @@ interface ZineState {
   setPageBackground: (index: number, color: string) => void;
   setPageLayout: (index: number, layout: LayoutKind) => void;
   setPageGutter: (index: number, gutter: number) => void;
+  /** Toggle a full-spread image across the two facing pages of a spread. */
+  toggleSpan: (index: number) => void;
   movePage: (from: number, to: number) => void;
 
   // --- assets / cells ---
@@ -80,6 +83,15 @@ function defaultImage(assetId: string): PageImage {
 /** Replace the page at `index` with the result of `fn`, immutably. */
 function withPage(pages: Page[], index: number, fn: (p: Page) => Page): Page[] {
   return pages.map((p, i) => (i === index ? fn(p) : p));
+}
+
+/** The interior spread {left,right} containing `index`, or null for covers. */
+function interiorSpread(pageCount: number, index: number) {
+  const sp = buildSpreads(pageCount).find(
+    (s) => s.left === index || s.right === index,
+  );
+  if (!sp || sp.left === null || sp.right === null) return null;
+  return { left: sp.left, right: sp.right };
 }
 
 const clampPageCount = (n: number) =>
@@ -181,18 +193,52 @@ export const useZine = create<ZineState>((set) => ({
   setPageLayout: (index, layout) =>
     set((s) => {
       const count = cellCount(layout);
-      return {
-        doc: {
-          ...s.doc,
-          pages: withPage(s.doc.pages, index, (p) => ({
+      // Choosing a grid layout exits span mode (clear both facing pages).
+      const partner = s.doc.pages[index].span
+        ? interiorSpread(s.doc.pages.length, index)
+        : null;
+      const pages = s.doc.pages.map((p, i) => {
+        if (i === index) {
+          return {
             ...p,
             layout,
-            cells: Array.from({ length: count }, (_, i) => p.cells[i] ?? null),
-          })),
-        },
+            span: undefined,
+            cells: Array.from({ length: count }, (_, j) => p.cells[j] ?? null),
+          };
+        }
+        if (partner && (i === partner.left || i === partner.right)) {
+          return { ...p, span: undefined };
+        }
+        return p;
+      });
+      return {
+        doc: { ...s.doc, pages },
         selectedCellIndex: Math.min(s.selectedCellIndex, count - 1),
         revision: s.revision + 1,
       };
+    }),
+
+  toggleSpan: (index) =>
+    set((s) => {
+      const sp = interiorSpread(s.doc.pages.length, index);
+      if (!sp) return s; // covers have no facing page to span onto
+      const spanning = !!s.doc.pages[sp.left].span;
+      const shared =
+        s.doc.pages[sp.left].cells[0] ?? s.doc.pages[sp.right].cells[0] ?? null;
+      const pages = s.doc.pages.map((p, i) => {
+        if (i === sp.left) {
+          return spanning
+            ? { ...p, span: undefined }
+            : { ...p, layout: "single" as LayoutKind, span: "left" as const, cells: [shared] };
+        }
+        if (i === sp.right) {
+          return spanning
+            ? { ...p, span: undefined }
+            : { ...p, layout: "single" as LayoutKind, span: "right" as const, cells: [shared] };
+        }
+        return p;
+      });
+      return { doc: { ...s.doc, pages }, selectedCellIndex: 0, revision: s.revision + 1 };
     }),
 
   setPageGutter: (index, gutter) =>
@@ -234,48 +280,96 @@ export const useZine = create<ZineState>((set) => ({
     })),
 
   setCellImage: (index, cellIndex, assetId) =>
-    set((s) => ({
-      doc: {
-        ...s.doc,
-        pages: withPage(s.doc.pages, index, (p) => ({
-          ...p,
-          cells: p.cells.map((c, i) =>
-            i === cellIndex
-              ? c && c.assetId === assetId
-                ? c
-                : defaultImage(assetId)
-              : c,
-          ),
-        })),
-      },
-      revision: s.revision + 1,
-    })),
+    set((s) => {
+      const page = s.doc.pages[index];
+      const sp = page?.span && cellIndex === 0
+        ? interiorSpread(s.doc.pages.length, index)
+        : null;
+      if (sp) {
+        const existing = page.cells[0];
+        const img =
+          existing && existing.assetId === assetId
+            ? existing
+            : defaultImage(assetId);
+        const pages = s.doc.pages.map((p, i) =>
+          i === sp.left || i === sp.right ? { ...p, cells: [img] } : p,
+        );
+        return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
+      }
+      return {
+        doc: {
+          ...s.doc,
+          pages: withPage(s.doc.pages, index, (p) => ({
+            ...p,
+            cells: p.cells.map((c, i) =>
+              i === cellIndex
+                ? c && c.assetId === assetId
+                  ? c
+                  : defaultImage(assetId)
+                : c,
+            ),
+          })),
+        },
+        revision: s.revision + 1,
+      };
+    }),
 
   updateCellImage: (index, cellIndex, partial) =>
-    set((s) => ({
-      doc: {
-        ...s.doc,
-        pages: withPage(s.doc.pages, index, (p) => ({
-          ...p,
-          cells: p.cells.map((c, i) =>
-            i === cellIndex && c ? { ...c, ...partial } : c,
-          ),
-        })),
-      },
-      revision: s.revision + 1,
-    })),
+    set((s) => {
+      const page = s.doc.pages[index];
+      const sp = page?.span && cellIndex === 0
+        ? interiorSpread(s.doc.pages.length, index)
+        : null;
+      if (sp) {
+        const pages = s.doc.pages.map((p, i) =>
+          i === sp.left || i === sp.right
+            ? {
+                ...p,
+                cells: p.cells.map((c, j) =>
+                  j === 0 && c ? { ...c, ...partial } : c,
+                ),
+              }
+            : p,
+        );
+        return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
+      }
+      return {
+        doc: {
+          ...s.doc,
+          pages: withPage(s.doc.pages, index, (p) => ({
+            ...p,
+            cells: p.cells.map((c, i) =>
+              i === cellIndex && c ? { ...c, ...partial } : c,
+            ),
+          })),
+        },
+        revision: s.revision + 1,
+      };
+    }),
 
   clearCell: (index, cellIndex) =>
-    set((s) => ({
-      doc: {
-        ...s.doc,
-        pages: withPage(s.doc.pages, index, (p) => ({
-          ...p,
-          cells: p.cells.map((c, i) => (i === cellIndex ? null : c)),
-        })),
-      },
-      revision: s.revision + 1,
-    })),
+    set((s) => {
+      const page = s.doc.pages[index];
+      const sp = page?.span && cellIndex === 0
+        ? interiorSpread(s.doc.pages.length, index)
+        : null;
+      if (sp) {
+        const pages = s.doc.pages.map((p, i) =>
+          i === sp.left || i === sp.right ? { ...p, cells: [null] } : p,
+        );
+        return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
+      }
+      return {
+        doc: {
+          ...s.doc,
+          pages: withPage(s.doc.pages, index, (p) => ({
+            ...p,
+            cells: p.cells.map((c, i) => (i === cellIndex ? null : c)),
+          })),
+        },
+        revision: s.revision + 1,
+      };
+    }),
 
   addText: (index) =>
     set((s) => {

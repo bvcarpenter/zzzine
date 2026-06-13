@@ -73,6 +73,12 @@ export interface Page {
   cells: (PageImage | null)[];
   /** Gap between and around cells, in points. */
   gutter: number;
+  /**
+   * When set, this page shows one half of an image spanning the whole reader
+   * spread. The two facing pages share the same cells[0] image; this flag says
+   * which half to show. Forces a single-cell layout.
+   */
+  span?: "left" | "right";
   texts: TextBlock[];
 }
 

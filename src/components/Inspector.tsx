@@ -13,6 +13,7 @@ import { useZine } from "../store";
 import { importImageFile } from "../lib/image";
 import { MAX_PAGES, MIN_PAGES, PAGES_PER_SHEET } from "../lib/constants";
 import { LAYOUTS, layoutDef } from "../lib/layout";
+import { buildSpreads } from "../lib/spreads";
 import type {
   FitMode,
   LayoutKind,
@@ -67,6 +68,7 @@ export function Inspector() {
   const setPageBackground = useZine((s) => s.setPageBackground);
   const setPageLayout = useZine((s) => s.setPageLayout);
   const setPageGutter = useZine((s) => s.setPageGutter);
+  const toggleSpan = useZine((s) => s.toggleSpan);
   const addText = useZine((s) => s.addText);
   const addAsset = useZine((s) => s.addAsset);
   const removeAsset = useZine((s) => s.removeAsset);
@@ -85,7 +87,14 @@ export function Inspector() {
   const img = page.cells[safeCell] ?? null;
   const selectedText = page.texts.find((t) => t.id === selectedTextId) ?? null;
   const total = doc.pages.length;
-  const multiCell = page.cells.length > 1;
+  const spanning = !!page.span;
+  const multiCell = page.cells.length > 1 && !spanning;
+
+  // Spanning is only possible on an interior spread (two facing pages).
+  const sp = buildSpreads(total).find(
+    (x) => x.left === index || x.right === index,
+  );
+  const canSpan = !!sp && sp.left !== null && sp.right !== null;
 
   const onPickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -153,34 +162,50 @@ export function Inspector() {
 
       {/* Page */}
       <Section title={`Page ${index + 1}`}>
-        <span className="text-xs text-neutral-400">Layout</span>
-        <div className="grid grid-cols-6 gap-1.5">
-          {LAYOUTS.map((l) => (
-            <button
-              key={l.kind}
-              title={l.label}
-              onClick={() => setPageLayout(index, l.kind)}
-              className={`flex items-center justify-center rounded border py-1.5 ${
-                page.layout === l.kind
-                  ? "border-violet-500 bg-violet-600/20 text-violet-300"
-                  : "border-neutral-700 text-neutral-400 hover:border-neutral-500"
-              }`}
-            >
-              <LayoutGlyph kind={l.kind} />
-            </button>
-          ))}
-        </div>
-        <Field label="Gap">
-          <Slider
-            value={page.gutter}
-            min={0}
-            max={48}
-            onChange={(v) => setPageGutter(index, v)}
+        {canSpan && (
+          <Toggle
+            label="Span image across spread"
+            checked={spanning}
+            onChange={() => toggleSpan(index)}
           />
-          <span className="w-8 text-right text-xs text-neutral-500">
-            {page.gutter}
-          </span>
-        </Field>
+        )}
+        {!spanning && (
+          <>
+            <span className="text-xs text-neutral-400">Layout</span>
+            <div className="grid grid-cols-6 gap-1.5">
+              {LAYOUTS.map((l) => (
+                <button
+                  key={l.kind}
+                  title={l.label}
+                  onClick={() => setPageLayout(index, l.kind)}
+                  className={`flex items-center justify-center rounded border py-1.5 ${
+                    page.layout === l.kind
+                      ? "border-violet-500 bg-violet-600/20 text-violet-300"
+                      : "border-neutral-700 text-neutral-400 hover:border-neutral-500"
+                  }`}
+                >
+                  <LayoutGlyph kind={l.kind} />
+                </button>
+              ))}
+            </div>
+            <Field label="Gap">
+              <Slider
+                value={page.gutter}
+                min={0}
+                max={48}
+                onChange={(v) => setPageGutter(index, v)}
+              />
+              <span className="w-8 text-right text-xs text-neutral-500">
+                {page.gutter}
+              </span>
+            </Field>
+          </>
+        )}
+        {spanning && (
+          <p className="text-xs text-neutral-500">
+            This image spans both facing pages. Edits apply to the whole spread.
+          </p>
+        )}
         <Field label="Background">
           <ColorInput
             value={page.background}
@@ -219,7 +244,15 @@ export function Inspector() {
       )}
 
       {/* Image controls for the selected cell */}
-      <Section title={multiCell ? `Image · cell ${safeCell + 1}` : "Image"}>
+      <Section
+        title={
+          spanning
+            ? "Image · spans spread"
+            : multiCell
+              ? `Image · cell ${safeCell + 1}`
+              : "Image"
+        }
+      >
         <Button onClick={() => fileRef.current?.click()} className="w-full">
           <ImageIcon size={15} />
           {img ? "Replace image" : "Add image"}
