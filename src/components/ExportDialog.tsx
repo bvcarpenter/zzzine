@@ -86,12 +86,24 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             checked={foldGuide}
             onChange={setFoldGuide}
           />
-          <p className="text-xs leading-relaxed text-neutral-500">
-            Prints {sheets} double-sided landscape sheet{sheets === 1 ? "" : "s"}
-            . Print two-sided; if the back pages come out upside down, toggle the
-            long-edge option above and re-export. Stack the sheets in order, fold
-            in half, and staple the spine.
-          </p>
+          <div className="text-xs leading-relaxed text-neutral-500">
+            {sheets} landscape sheet{sheets === 1 ? "" : "s"}, printed
+            double-sided. To assemble:
+            <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+              <li>
+                Print two-sided at 100% (actual size). For these landscape
+                sheets, choose <strong>flip on short edge</strong>.
+              </li>
+              <li>
+                If the back sides come out upside down, turn on the long-edge
+                option above and re-export.
+              </li>
+              <li>
+                Keep the sheets in printed order (first sheet on top), fold the
+                whole stack in half, and staple along the spine.
+              </li>
+            </ol>
+          </div>
         </Section>
 
         {error && (

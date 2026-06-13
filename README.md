@@ -56,7 +56,12 @@ npm install
 npm run dev      # start the dev server
 npm run build    # type-check + production build into dist/
 npm run preview  # serve the production build locally
+npm test         # run the imposition tests
 ```
+
+The imposition is covered by `src/lib/imposition.test.ts`, which checks the
+page pairing against the textbook saddle-stitch tables and simulates folding
+the printed sheets to confirm the assembled booklet reads 1, 2, 3 … in order.
 
 Requirements: Node 20+ (developed on Node 22).
 
