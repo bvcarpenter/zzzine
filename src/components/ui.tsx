@@ -165,12 +165,14 @@ export function Button({
   variant = "default",
   disabled,
   className = "",
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
   variant?: "default" | "primary" | "ghost" | "danger";
   disabled?: boolean;
   className?: string;
+  title?: string;
 }) {
   const styles: Record<string, string> = {
     default:
@@ -183,6 +185,7 @@ export function Button({
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${styles[variant]} ${className}`}
     >
       {children}

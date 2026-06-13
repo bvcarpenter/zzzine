@@ -11,9 +11,16 @@ import {
 } from "lucide-react";
 import { useZine } from "../store";
 import { importImageFile } from "../lib/image";
-import { MAX_PAGES, MIN_PAGES, PAGES_PER_SHEET } from "../lib/constants";
+import {
+  MAX_PAGES,
+  MIN_PAGES,
+  PAGES_PER_SHEET,
+  PAGE_HEIGHT_PT,
+  PAGE_WIDTH_PT,
+} from "../lib/constants";
 import { LAYOUTS, layoutDef } from "../lib/layout";
 import { buildSpreads } from "../lib/spreads";
+import { wrapLines } from "../lib/textlayout";
 import type {
   FitMode,
   LayoutKind,
@@ -22,7 +29,30 @@ import type {
   TextBlock,
 } from "../types";
 import { FontSelect } from "./FontSelect";
-import { getFont } from "../lib/fonts";
+import { fontCss, getFont } from "../lib/fonts";
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/** Estimate a text block's rendered height as a fraction of the page. */
+function textHeightFraction(block: TextBlock): number {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const def = getFont(block.fontFamily);
+  const weight = def.supportsStyles && block.bold ? "700 " : "";
+  const style = def.supportsStyles && block.italic ? "italic " : "";
+  let lineCount = 1;
+  if (ctx) {
+    ctx.font = `${style}${weight}${block.fontSize}px ${fontCss(block.fontFamily)}`;
+    const maxWidth = block.width * PAGE_WIDTH_PT;
+    lineCount = Math.max(
+      1,
+      wrapLines(block.text || " ", maxWidth, (t) => ctx.measureText(t).width)
+        .length,
+    );
+  }
+  const heightPt = lineCount * block.fontSize * block.lineHeight;
+  return heightPt / PAGE_HEIGHT_PT;
+}
 import {
   Button,
   ColorInput,
@@ -309,6 +339,16 @@ export function Inspector() {
               <Button
                 variant="ghost"
                 className="flex-1"
+                title="Center the image in its slot"
+                onClick={() =>
+                  updateCellImage(index, safeCell, { offsetX: 0, offsetY: 0 })
+                }
+              >
+                Center
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex-1"
                 onClick={() =>
                   updateCellImage(index, safeCell, {
                     offsetX: 0,
@@ -317,7 +357,7 @@ export function Inspector() {
                   })
                 }
               >
-                Reset position
+                Reset
               </Button>
               <Button variant="danger" onClick={() => clearCell(index, safeCell)}>
                 <Trash2 size={15} />
@@ -524,6 +564,39 @@ function TextControls({
           step={0.01}
           onChange={(v) => onChange({ width: v })}
         />
+      </Field>
+      <Field label="Center on page">
+        <Button
+          variant="ghost"
+          className="!px-2"
+          title="Center horizontally"
+          onClick={() => onChange({ x: clamp01((1 - block.width) / 2) })}
+        >
+          ↔
+        </Button>
+        <Button
+          variant="ghost"
+          className="!px-2"
+          title="Center vertically"
+          onClick={() =>
+            onChange({ y: clamp01((1 - textHeightFraction(block)) / 2) })
+          }
+        >
+          ↕
+        </Button>
+        <Button
+          variant="ghost"
+          className="!px-2"
+          title="Center both ways"
+          onClick={() =>
+            onChange({
+              x: clamp01((1 - block.width) / 2),
+              y: clamp01((1 - textHeightFraction(block)) / 2),
+            })
+          }
+        >
+          ＋
+        </Button>
       </Field>
       <Field label="Rotation">
         <Slider

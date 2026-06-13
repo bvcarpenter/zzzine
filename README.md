@@ -22,6 +22,8 @@ proper saddle-stitch booklet so you can choose your own page count.
 - **Text & captions** placed anywhere on a page — drag to move, double-click to
   edit. Pick a font, size, color, alignment, optional highlight background, and
   a little rotation. Text can sit over an image.
+- **Centering tools** — one click to center text horizontally, vertically, or
+  both; images have a Center button too.
 - **Fonts with personality:** Helvetica / Times / Courier plus bundled display
   faces (Anton, Archivo Black, Bebas Neue, Lobster, Permanent Marker, Special
   Elite). All are embedded into the exported PDF.
