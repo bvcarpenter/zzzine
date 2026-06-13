@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { TopBar } from "./components/TopBar";
 import { PageList } from "./components/PageList";
-import { PageCanvas } from "./components/PageCanvas";
+import { SpreadView } from "./components/SpreadView";
 import { Inspector } from "./components/Inspector";
 import { useZine } from "./store";
 import { loadProject, saveProject } from "./lib/storage";
@@ -80,7 +80,7 @@ export default function App() {
       <TopBar />
       <div className="flex min-h-0 flex-1">
         <PageList />
-        <PageCanvas />
+        <SpreadView />
         <Inspector />
       </div>
     </div>

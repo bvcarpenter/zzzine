@@ -31,6 +31,8 @@ interface ZineState {
   // --- selection ---
   selectPage: (index: number) => void;
   selectText: (id: string | null) => void;
+  /** Select a text block and the page it lives on in one step. */
+  focusText: (index: number, id: string) => void;
 
   // --- pages ---
   setPageBackground: (index: number, color: string) => void;
@@ -131,6 +133,9 @@ export const useZine = create<ZineState>((set) => ({
     set({ selectedPageIndex: index, selectedTextId: null }),
 
   selectText: (id) => set({ selectedTextId: id }),
+
+  focusText: (index, id) =>
+    set({ selectedPageIndex: index, selectedTextId: id }),
 
   setPageBackground: (index, color) =>
     set((s) => ({

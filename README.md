@@ -11,6 +11,9 @@ proper saddle-stitch booklet so you can choose your own page count.
 
 - **Half-letter booklet format.** Each 8.5×11" sheet, folded in half, makes four
   5.5×8.5" pages. Page count is any multiple of 4 (4–64).
+- **Open-book spread editor.** Edit two facing pages side by side, the way the
+  folded booklet actually reads — cover alone, then 2–3, 4–5, … with the back
+  cover alone. Click either page to edit it; flip spreads with the arrows.
 - **One image per page**, with fit (fill / fit / stretch), quarter-turn
   rotation, horizontal/vertical flip, zoom (scroll) and drag-to-reposition.
 - **Text & captions** placed anywhere on a page — drag to move, double-click to
@@ -67,7 +70,8 @@ src/
   store.ts            # Zustand store (document + assets + selection)
   lib/
     constants.ts      # page/sheet dimensions in PDF points
-    imposition.ts     # saddle-stitch booklet page ordering
+    imposition.ts     # saddle-stitch booklet page ordering (for printing)
+    spreads.ts        # reader spreads for the open-book editor
     render.ts         # shared image-slot compositing (editor + PDF)
     pdf.ts            # PDF export (pdf-lib + fontkit), loaded on demand
     fonts.ts          # font registry (standard + embedded)
