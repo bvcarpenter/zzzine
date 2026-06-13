@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   Asset,
+  LayoutKind,
   Page,
   PageImage,
   PageNumberSettings,
@@ -10,11 +11,15 @@ import type {
 import { createPage, createTextBlock, createZine } from "./lib/factory";
 import { MAX_PAGES, MIN_PAGES } from "./lib/constants";
 import { roundUpToSheet } from "./lib/imposition";
+import { cellCount } from "./lib/layout";
+import { migrateZine } from "./lib/migrate";
 
 interface ZineState {
   doc: Zine;
   assets: Asset[];
   selectedPageIndex: number;
+  /** Active image cell within the selected page. */
+  selectedCellIndex: number;
   selectedTextId: string | null;
   /** Bumped whenever the document or assets change, to drive autosave. */
   revision: number;
@@ -30,20 +35,27 @@ interface ZineState {
 
   // --- selection ---
   selectPage: (index: number) => void;
+  selectCell: (cellIndex: number) => void;
+  focusCell: (index: number, cellIndex: number) => void;
   selectText: (id: string | null) => void;
-  /** Select a text block and the page it lives on in one step. */
   focusText: (index: number, id: string) => void;
 
   // --- pages ---
   setPageBackground: (index: number, color: string) => void;
+  setPageLayout: (index: number, layout: LayoutKind) => void;
+  setPageGutter: (index: number, gutter: number) => void;
   movePage: (from: number, to: number) => void;
 
-  // --- assets / images ---
+  // --- assets / cells ---
   addAsset: (asset: Asset) => void;
   removeAsset: (assetId: string) => void;
-  setPageImage: (index: number, assetId: string) => void;
-  updatePageImage: (index: number, partial: Partial<PageImage>) => void;
-  clearPageImage: (index: number) => void;
+  setCellImage: (index: number, cellIndex: number, assetId: string) => void;
+  updateCellImage: (
+    index: number,
+    cellIndex: number,
+    partial: Partial<PageImage>,
+  ) => void;
+  clearCell: (index: number, cellIndex: number) => void;
 
   // --- text ---
   addText: (index: number) => void;
@@ -77,14 +89,16 @@ export const useZine = create<ZineState>((set) => ({
   doc: createZine(),
   assets: [],
   selectedPageIndex: 0,
+  selectedCellIndex: 0,
   selectedTextId: null,
   revision: 0,
 
   hydrate: (doc, assets) =>
     set({
-      doc,
+      doc: migrateZine(doc),
       assets,
       selectedPageIndex: 0,
+      selectedCellIndex: 0,
       selectedTextId: null,
       revision: 0,
     }),
@@ -94,6 +108,7 @@ export const useZine = create<ZineState>((set) => ({
       doc: createZine(),
       assets: [],
       selectedPageIndex: 0,
+      selectedCellIndex: 0,
       selectedTextId: null,
       revision: s.revision + 1,
     })),
@@ -118,6 +133,7 @@ export const useZine = create<ZineState>((set) => ({
       return {
         doc: { ...s.doc, pages },
         selectedPageIndex,
+        selectedCellIndex: 0,
         selectedTextId: null,
         revision: s.revision + 1,
       };
@@ -130,7 +146,20 @@ export const useZine = create<ZineState>((set) => ({
     })),
 
   selectPage: (index) =>
-    set({ selectedPageIndex: index, selectedTextId: null }),
+    set({
+      selectedPageIndex: index,
+      selectedCellIndex: 0,
+      selectedTextId: null,
+    }),
+
+  selectCell: (cellIndex) => set({ selectedCellIndex: cellIndex }),
+
+  focusCell: (index, cellIndex) =>
+    set({
+      selectedPageIndex: index,
+      selectedCellIndex: cellIndex,
+      selectedTextId: null,
+    }),
 
   selectText: (id) => set({ selectedTextId: id }),
 
@@ -145,6 +174,32 @@ export const useZine = create<ZineState>((set) => ({
           ...p,
           background: color,
         })),
+      },
+      revision: s.revision + 1,
+    })),
+
+  setPageLayout: (index, layout) =>
+    set((s) => {
+      const count = cellCount(layout);
+      return {
+        doc: {
+          ...s.doc,
+          pages: withPage(s.doc.pages, index, (p) => ({
+            ...p,
+            layout,
+            cells: Array.from({ length: count }, (_, i) => p.cells[i] ?? null),
+          })),
+        },
+        selectedCellIndex: Math.min(s.selectedCellIndex, count - 1),
+        revision: s.revision + 1,
+      };
+    }),
+
+  setPageGutter: (index, gutter) =>
+    set((s) => ({
+      doc: {
+        ...s.doc,
+        pages: withPage(s.doc.pages, index, (p) => ({ ...p, gutter })),
       },
       revision: s.revision + 1,
     })),
@@ -170,45 +225,54 @@ export const useZine = create<ZineState>((set) => ({
       assets: s.assets.filter((a) => a.id !== assetId),
       doc: {
         ...s.doc,
-        pages: s.doc.pages.map((p) =>
-          p.image?.assetId === assetId ? { ...p, image: null } : p,
-        ),
-      },
-      revision: s.revision + 1,
-    })),
-
-  setPageImage: (index, assetId) =>
-    set((s) => ({
-      doc: {
-        ...s.doc,
-        pages: withPage(s.doc.pages, index, (p) => ({
+        pages: s.doc.pages.map((p) => ({
           ...p,
-          // Keep existing adjustments if the same asset is re-selected.
-          image:
-            p.image && p.image.assetId === assetId
-              ? p.image
-              : defaultImage(assetId),
+          cells: p.cells.map((c) => (c && c.assetId === assetId ? null : c)),
         })),
       },
       revision: s.revision + 1,
     })),
 
-  updatePageImage: (index, partial) =>
+  setCellImage: (index, cellIndex, assetId) =>
     set((s) => ({
       doc: {
         ...s.doc,
-        pages: withPage(s.doc.pages, index, (p) =>
-          p.image ? { ...p, image: { ...p.image, ...partial } } : p,
-        ),
+        pages: withPage(s.doc.pages, index, (p) => ({
+          ...p,
+          cells: p.cells.map((c, i) =>
+            i === cellIndex
+              ? c && c.assetId === assetId
+                ? c
+                : defaultImage(assetId)
+              : c,
+          ),
+        })),
       },
       revision: s.revision + 1,
     })),
 
-  clearPageImage: (index) =>
+  updateCellImage: (index, cellIndex, partial) =>
     set((s) => ({
       doc: {
         ...s.doc,
-        pages: withPage(s.doc.pages, index, (p) => ({ ...p, image: null })),
+        pages: withPage(s.doc.pages, index, (p) => ({
+          ...p,
+          cells: p.cells.map((c, i) =>
+            i === cellIndex && c ? { ...c, ...partial } : c,
+          ),
+        })),
+      },
+      revision: s.revision + 1,
+    })),
+
+  clearCell: (index, cellIndex) =>
+    set((s) => ({
+      doc: {
+        ...s.doc,
+        pages: withPage(s.doc.pages, index, (p) => ({
+          ...p,
+          cells: p.cells.map((c, i) => (i === cellIndex ? null : c)),
+        })),
       },
       revision: s.revision + 1,
     })),

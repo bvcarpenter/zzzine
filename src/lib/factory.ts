@@ -9,7 +9,9 @@ export function createPage(): Page {
   return {
     id: uid("page"),
     background: "#ffffff",
-    image: null,
+    layout: "single",
+    cells: [null],
+    gutter: 0,
     texts: [],
   };
 }

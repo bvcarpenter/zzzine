@@ -1,8 +1,11 @@
 import { useRef } from "react";
+import { ImageIcon } from "lucide-react";
 import { ImageSlotCanvas } from "./ImageSlotCanvas";
 import { TextBlockView } from "./TextBlockView";
 import { useZine } from "../store";
-import { PAGE_WIDTH_PT } from "../lib/constants";
+import { PAGE_HEIGHT_PT, PAGE_WIDTH_PT } from "../lib/constants";
+import { cellRects } from "../lib/layout";
+import type { Asset, PageImage } from "../types";
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v));
@@ -14,49 +17,51 @@ interface PanState {
   baseY: number;
 }
 
-interface Props {
-  index: number;
+interface CellProps {
+  pageIndex: number;
+  cellIndex: number;
+  image: PageImage | null;
+  asset: Asset | null;
+  left: number;
+  top: number;
   width: number;
   height: number;
+  selected: boolean;
 }
 
-/** One editable booklet page: background, image (pan/zoom), and text blocks. */
-export function EditablePage({ index, width, height }: Props) {
-  const page = useZine((s) => s.doc.pages[index]);
-  const assets = useZine((s) => s.assets);
-  const selectedPageIndex = useZine((s) => s.selectedPageIndex);
-  const selectedTextId = useZine((s) => s.selectedTextId);
-  const selectPage = useZine((s) => s.selectPage);
-  const focusText = useZine((s) => s.focusText);
-  const updateText = useZine((s) => s.updateText);
-  const updatePageImage = useZine((s) => s.updatePageImage);
-
+function CellView({
+  pageIndex,
+  cellIndex,
+  image,
+  asset,
+  left,
+  top,
+  width,
+  height,
+  selected,
+}: CellProps) {
+  const focusCell = useZine((s) => s.focusCell);
+  const updateCellImage = useZine((s) => s.updateCellImage);
   const pan = useRef<PanState | null>(null);
 
-  if (!page) return null;
-
-  const pxPerPt = width / PAGE_WIDTH_PT;
-  const active = index === selectedPageIndex;
-  const asset =
-    (page.image && assets.find((a) => a.id === page.image!.assetId)) || null;
-
-  const onBackgroundPointerDown = (e: React.PointerEvent) => {
-    selectPage(index);
-    if (!page.image) return;
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    focusCell(pageIndex, cellIndex);
+    if (!image) return;
     pan.current = {
       startX: e.clientX,
       startY: e.clientY,
-      baseX: page.image.offsetX,
-      baseY: page.image.offsetY,
+      baseX: image.offsetX,
+      baseY: image.offsetY,
     };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  const onBackgroundPointerMove = (e: React.PointerEvent) => {
-    if (!pan.current || !page.image) return;
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!pan.current || !image) return;
     const dx = (e.clientX - pan.current.startX) / width;
     const dy = (e.clientY - pan.current.startY) / height;
-    updatePageImage(index, {
+    updateCellImage(pageIndex, cellIndex, {
       offsetX: clamp(pan.current.baseX + dx, -1.5, 1.5),
       offsetY: clamp(pan.current.baseY + dy, -1.5, 1.5),
     });
@@ -72,38 +77,105 @@ export function EditablePage({ index, width, height }: Props) {
   };
 
   const onWheel = (e: React.WheelEvent) => {
-    if (!page.image) return;
+    if (!image) return;
     e.preventDefault();
     const factor = Math.exp(-e.deltaY * 0.0015);
-    updatePageImage(index, { zoom: clamp(page.image.zoom * factor, 0.2, 6) });
+    updateCellImage(pageIndex, cellIndex, {
+      zoom: clamp(image.zoom * factor, 0.2, 6),
+    });
   };
 
   return (
     <div
-      className="relative shrink-0 checker"
+      className="absolute overflow-hidden"
+      style={{
+        left,
+        top,
+        width,
+        height,
+        outline: selected
+          ? "2px solid #7c3aed"
+          : "1px solid rgba(255,255,255,0.12)",
+        outlineOffset: "-1px",
+      }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endPan}
+      onPointerCancel={endPan}
+      onWheel={onWheel}
+    >
+      <ImageSlotCanvas
+        image={image}
+        asset={asset}
+        width={width}
+        height={height}
+      />
+      {!image && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-400/70">
+          <ImageIcon size={Math.min(22, width / 4)} />
+          {selected && <span className="text-[10px]">Add image →</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface Props {
+  index: number;
+  width: number;
+  height: number;
+}
+
+/** One editable booklet page: a grid of image cells plus text blocks. */
+export function EditablePage({ index, width, height }: Props) {
+  const page = useZine((s) => s.doc.pages[index]);
+  const assets = useZine((s) => s.assets);
+  const selectedPageIndex = useZine((s) => s.selectedPageIndex);
+  const selectedCellIndex = useZine((s) => s.selectedCellIndex);
+  const selectedTextId = useZine((s) => s.selectedTextId);
+  const selectPage = useZine((s) => s.selectPage);
+  const focusText = useZine((s) => s.focusText);
+  const updateText = useZine((s) => s.updateText);
+
+  if (!page) return null;
+
+  const pxPerPt = width / PAGE_WIDTH_PT;
+  const active = index === selectedPageIndex;
+  const rects = cellRects(
+    page.layout,
+    page.gutter / PAGE_WIDTH_PT,
+    page.gutter / PAGE_HEIGHT_PT,
+  );
+
+  const assetFor = (img: PageImage | null) =>
+    (img && assets.find((a) => a.id === img.assetId)) || null;
+
+  return (
+    <div
+      className="relative shrink-0"
       style={{
         width,
         height,
+        background: page.background,
         outline: active ? "2px solid #7c3aed" : "1px solid rgba(0,0,0,0.45)",
         outlineOffset: active ? "-1px" : "0",
       }}
+      onPointerDown={() => selectPage(index)}
     >
-      <div
-        className="absolute inset-0"
-        style={{ background: page.background }}
-        onPointerDown={onBackgroundPointerDown}
-        onPointerMove={onBackgroundPointerMove}
-        onPointerUp={endPan}
-        onPointerCancel={endPan}
-        onWheel={onWheel}
-      >
-        <ImageSlotCanvas
-          image={page.image}
-          asset={asset}
-          width={width}
-          height={height}
+      {rects.map((r, ci) => (
+        <CellView
+          key={ci}
+          pageIndex={index}
+          cellIndex={ci}
+          image={page.cells[ci] ?? null}
+          asset={assetFor(page.cells[ci] ?? null)}
+          left={r.x * width}
+          top={r.y * height}
+          width={r.w * width}
+          height={r.h * height}
+          selected={active && ci === selectedCellIndex}
         />
-      </div>
+      ))}
 
       {page.texts.map((t) => (
         <TextBlockView
@@ -118,12 +190,6 @@ export function EditablePage({ index, width, height }: Props) {
           onChange={(partial) => updateText(index, t.id, partial)}
         />
       ))}
-
-      {!page.image && page.texts.length === 0 && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-neutral-400">
-          {active ? "Add an image or text from the right panel." : ""}
-        </div>
-      )}
     </div>
   );
 }

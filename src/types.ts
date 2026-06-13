@@ -53,12 +53,26 @@ export interface TextBlock {
   rotation: number;
 }
 
+/** Image grid layouts for a page. */
+export type LayoutKind =
+  | "single" // 1
+  | "two-h" // 2 side by side
+  | "two-v" // 2 stacked
+  | "three-h" // 3 in a row
+  | "three-v" // 3 stacked
+  | "four"; // 2x2 grid
+
 /** One page of the zine (one half-letter face). */
 export interface Page {
   id: string;
   /** Solid background color of the page. */
   background: string;
-  image: PageImage | null;
+  /** Image grid layout. */
+  layout: LayoutKind;
+  /** One image slot per layout cell, in row-major order; null = empty. */
+  cells: (PageImage | null)[];
+  /** Gap between and around cells, in points. */
+  gutter: number;
   texts: TextBlock[];
 }
 

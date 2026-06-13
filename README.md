@@ -14,8 +14,9 @@ proper saddle-stitch booklet so you can choose your own page count.
 - **Open-book spread editor.** Edit two facing pages side by side, the way the
   folded booklet actually reads — cover alone, then 2–3, 4–5, … with the back
   cover alone. Click either page to edit it; flip spreads with the arrows.
-- **One image per page**, with fit (fill / fit / stretch), quarter-turn
-  rotation, horizontal/vertical flip, zoom (scroll) and drag-to-reposition.
+- **Image layouts per page** — single, 2-up (across or stacked), 3-up, or a
+  2×2 grid — with an adjustable gap. Each cell has its own fit (fill / fit /
+  stretch), quarter-turn rotation, flip, zoom (scroll) and drag-to-reposition.
 - **Text & captions** placed anywhere on a page — drag to move, double-click to
   edit. Pick a font, size, color, alignment, optional highlight background, and
   a little rotation. Text can sit over an image.
