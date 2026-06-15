@@ -85,7 +85,7 @@ function CellView({
     e.preventDefault();
     const factor = Math.exp(-e.deltaY * 0.0015);
     updateCellImage(pageIndex, cellIndex, {
-      zoom: clamp(image.zoom * factor, 0.2, 6),
+      zoom: Math.round(clamp(image.zoom * factor, 0.2, 6) * 100) / 100,
     });
   };
 

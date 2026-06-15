@@ -226,9 +226,13 @@ export function Inspector() {
                 max={48}
                 onChange={(v) => setPageGutter(index, v)}
               />
-              <span className="w-8 text-right text-xs text-neutral-500">
-                {page.gutter}
-              </span>
+              <NumberInput
+                value={page.gutter}
+                min={0}
+                max={96}
+                step={1}
+                onChange={(v) => setPageGutter(index, v)}
+              />
             </Field>
           </>
         )}
@@ -334,8 +338,19 @@ export function Inspector() {
                 value={img.zoom}
                 min={0.2}
                 max={4}
-                step={0.02}
+                step={0.01}
                 onChange={(v) => updateCellImage(index, safeCell, { zoom: v })}
+              />
+              <NumberInput
+                value={Math.round(img.zoom * 100) / 100}
+                min={0.1}
+                max={6}
+                step={0.05}
+                onChange={(v) =>
+                  updateCellImage(index, safeCell, {
+                    zoom: Math.round(v * 100) / 100,
+                  })
+                }
               />
             </Field>
             <div className="flex gap-2">
