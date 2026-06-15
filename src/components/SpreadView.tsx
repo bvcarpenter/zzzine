@@ -24,9 +24,25 @@ export function SpreadView() {
   const selectedPageIndex = useZine((s) => s.selectedPageIndex);
   const selectPage = useZine((s) => s.selectPage);
 
-  const spreads = buildSpreads(pageCount);
+  // When the covers carry a wrap-around photo, edit them as one combined
+  // "back | front" spread (and drop the standalone back-cover spread).
+  const coversWrap = useZine((s) => {
+    const ps = s.doc.pages;
+    return ps.length >= 4 && !!ps[0]?.span && !!ps[ps.length - 1]?.span;
+  });
+
+  let spreads = buildSpreads(pageCount);
+  if (coversWrap) {
+    spreads = [{ left: pageCount - 1, right: 0 }, ...spreads.slice(1, -1)];
+  }
   const current = spreadIndexOf(spreads, selectedPageIndex);
   const spread = spreads[current];
+  const isCombinedCover = coversWrap && current === 0;
+  const label = isCombinedCover
+    ? "Front & back cover"
+    : spread
+      ? spreadLabel(spread, pageCount)
+      : "";
 
   const goTo = (target: number) => {
     const s = spreads[Math.min(spreads.length - 1, Math.max(0, target))];
@@ -60,7 +76,7 @@ export function SpreadView() {
           <ChevronLeft size={20} />
         </button>
         <span className="min-w-[120px] text-center text-sm font-medium text-neutral-300">
-          {spread ? spreadLabel(spread, pageCount) : ""}
+          {label}
         </span>
         <button
           onClick={() => goTo(current + 1)}

@@ -19,7 +19,6 @@ import {
   PAGE_WIDTH_PT,
 } from "../lib/constants";
 import { LAYOUTS, layoutDef } from "../lib/layout";
-import { buildSpreads } from "../lib/spreads";
 import { wrapLines } from "../lib/textlayout";
 import type {
   FitMode,
@@ -120,11 +119,13 @@ export function Inspector() {
   const spanning = !!page.span;
   const multiCell = page.cells.length > 1 && !spanning;
 
-  // Spanning is only possible on an interior spread (two facing pages).
-  const sp = buildSpreads(total).find(
-    (x) => x.left === index || x.right === index,
-  );
-  const canSpan = !!sp && sp.left !== null && sp.right !== null;
+  // Interior pages span their facing spread; the covers wrap around (an image
+  // across the back and front cover).
+  const isCover = index === 0 || index === total - 1;
+  const canSpan = total >= 4;
+  const spanLabel = isCover
+    ? "Wrap photo across covers"
+    : "Span image across spread";
 
   const onPickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -194,7 +195,7 @@ export function Inspector() {
       <Section title={`Page ${index + 1}`}>
         {canSpan && (
           <Toggle
-            label="Span image across spread"
+            label={spanLabel}
             checked={spanning}
             onChange={() => toggleSpan(index)}
           />
@@ -233,7 +234,9 @@ export function Inspector() {
         )}
         {spanning && (
           <p className="text-xs text-neutral-500">
-            This image spans both facing pages. Edits apply to the whole spread.
+            {isCover
+              ? "This photo wraps across the back and front covers. Edits apply to both."
+              : "This image spans both facing pages. Edits apply to the whole spread."}
           </p>
         )}
         <Field label="Background">

@@ -99,6 +99,19 @@ function interiorSpread(pageCount: number, index: number) {
   return { left: sp.left, right: sp.right };
 }
 
+/**
+ * The pair of pages an image can span across, given a page. Interior pages
+ * span their facing reader-spread; the covers (first/last page) span each
+ * other as a wrap-around — back cover on the left, front cover on the right.
+ */
+function spanGroup(pageCount: number, index: number) {
+  if (pageCount < 4) return null;
+  if (index === 0 || index === pageCount - 1) {
+    return { left: pageCount - 1, right: 0 };
+  }
+  return interiorSpread(pageCount, index);
+}
+
 const clampPageCount = (n: number) =>
   Math.min(MAX_PAGES, Math.max(MIN_PAGES, roundUpToSheet(n)));
 
@@ -213,7 +226,7 @@ export const useZine = create<ZineState>((set) => ({
       const count = cellCount(layout);
       // Choosing a grid layout exits span mode (clear both facing pages).
       const partner = s.doc.pages[index].span
-        ? interiorSpread(s.doc.pages.length, index)
+        ? spanGroup(s.doc.pages.length, index)
         : null;
       const pages = s.doc.pages.map((p, i) => {
         if (i === index) {
@@ -238,8 +251,8 @@ export const useZine = create<ZineState>((set) => ({
 
   toggleSpan: (index) =>
     set((s) => {
-      const sp = interiorSpread(s.doc.pages.length, index);
-      if (!sp) return s; // covers have no facing page to span onto
+      const sp = spanGroup(s.doc.pages.length, index);
+      if (!sp) return s; // need at least one folded sheet to span
       const spanning = !!s.doc.pages[sp.left].span;
       const shared =
         s.doc.pages[sp.left].cells[0] ?? s.doc.pages[sp.right].cells[0] ?? null;
@@ -301,7 +314,7 @@ export const useZine = create<ZineState>((set) => ({
     set((s) => {
       const page = s.doc.pages[index];
       const sp = page?.span && cellIndex === 0
-        ? interiorSpread(s.doc.pages.length, index)
+        ? spanGroup(s.doc.pages.length, index)
         : null;
       if (sp) {
         const existing = page.cells[0];
@@ -336,7 +349,7 @@ export const useZine = create<ZineState>((set) => ({
     set((s) => {
       const page = s.doc.pages[index];
       const sp = page?.span && cellIndex === 0
-        ? interiorSpread(s.doc.pages.length, index)
+        ? spanGroup(s.doc.pages.length, index)
         : null;
       if (sp) {
         const pages = s.doc.pages.map((p, i) =>
@@ -369,7 +382,7 @@ export const useZine = create<ZineState>((set) => ({
     set((s) => {
       const page = s.doc.pages[index];
       const sp = page?.span && cellIndex === 0
-        ? interiorSpread(s.doc.pages.length, index)
+        ? spanGroup(s.doc.pages.length, index)
         : null;
       if (sp) {
         const pages = s.doc.pages.map((p, i) =>

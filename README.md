@@ -17,8 +17,9 @@ proper saddle-stitch booklet so you can choose your own page count.
 - **Image layouts per page** — single, 2-up (across or stacked), 3-up, or a
   2×2 grid — with an adjustable gap. Each cell has its own fit (fill / fit /
   stretch), quarter-turn rotation, flip, zoom (scroll) and drag-to-reposition.
-- **Spread images** — span one image across two facing pages. It's split into
-  matching halves that line up across the fold when the booklet is assembled.
+- **Spread images** — span one image across two facing pages, or wrap a
+  landscape photo around the front and back covers. It's split into matching
+  halves that line up across the fold when the booklet is assembled.
 - **Text & captions** placed anywhere on a page — drag to move, double-click to
   edit. Pick a font, size, color, alignment, optional highlight background, and
   a little rotation. Text can sit over an image.
