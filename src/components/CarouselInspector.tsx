@@ -47,6 +47,8 @@ export function CarouselInspector() {
 
   const setSlideCount = useZine((s) => s.setSlideCount);
   const setItemAspect = useZine((s) => s.setItemAspect);
+  const reframeMode = useZine((s) => s.reframeMode);
+  const setReframeMode = useZine((s) => s.setReframeMode);
   const setPageBackground = useZine((s) => s.setPageBackground);
   const addImageItem = useZine((s) => s.addImageItem);
   const updateImageItem = useZine((s) => s.updateImageItem);
@@ -246,15 +248,26 @@ export function CarouselInspector() {
               </Button>
             </div>
           </div>
+          <div>
+            <span className="text-xs text-neutral-400">Crop / reframe</span>
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+              <Button
+                variant={reframeMode ? "primary" : "ghost"}
+                title="Drag the photo to reposition it inside its frame"
+                onClick={() => setReframeMode(!reframeMode)}
+              >
+                {reframeMode ? "Reframing…" : "Reframe"}
+              </Button>
+              <Button
+                variant="ghost"
+                title="Recenter the photo in its frame"
+                onClick={() => updateImageItem(item.id, { offsetX: 0, offsetY: 0 })}
+              >
+                Center
+              </Button>
+            </div>
+          </div>
           <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              className="flex-1"
-              title="Center the image in its box"
-              onClick={() => updateImageItem(item.id, { offsetX: 0, offsetY: 0 })}
-            >
-              Center
-            </Button>
             <Button variant="ghost" className="flex-1" onClick={() => bringItemToFront(item.id)}>
               To front
             </Button>
@@ -263,7 +276,9 @@ export function CarouselInspector() {
             </Button>
           </div>
           <p className="text-xs text-neutral-500">
-            Drag the photo to move it; drag its corner handle to resize.
+            {reframeMode
+              ? "Reframe on: drag the photo to reposition it inside its frame (zoom to fill). Tap Reframe again to move/resize the frame."
+              : "Drag to move; drag the corner to resize. Both snap to edges, slide cuts, and matching margins."}
           </p>
         </Section>
       )}

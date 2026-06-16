@@ -28,6 +28,8 @@ interface ZineState {
   selectedTextId: string | null;
   /** Selected free-form image item (carousel canvas). */
   selectedItemId: string | null;
+  /** When true, dragging the selected item pans the photo inside its crop. */
+  reframeMode: boolean;
   /** Bumped whenever the document or assets change, to drive autosave. */
   revision: number;
   /** Id of the draft currently being edited (null until loaded). */
@@ -51,6 +53,7 @@ interface ZineState {
 
   // --- carousel free-form image items (operate on pages[0]) ---
   selectItem: (id: string | null) => void;
+  setReframeMode: (on: boolean) => void;
   addImageItem: (assetId: string) => void;
   updateImageItem: (id: string, partial: Partial<ImageItem>) => void;
   removeImageItem: (id: string) => void;
@@ -168,6 +171,7 @@ export const useZine = create<ZineState>((set) => ({
   selectedCellIndex: 0,
   selectedTextId: null,
   selectedItemId: null,
+  reframeMode: false,
   revision: 0,
   currentDraftId: null,
 
@@ -222,7 +226,15 @@ export const useZine = create<ZineState>((set) => ({
       };
     }),
 
-  selectItem: (id) => set({ selectedItemId: id, selectedTextId: null }),
+  selectItem: (id) =>
+    set((s) => ({
+      selectedItemId: id,
+      selectedTextId: null,
+      // Keep reframe on when re-selecting the same item (e.g. on drag-start);
+      // turn it off when switching to a different item or deselecting.
+      reframeMode: id !== null && id === s.selectedItemId ? s.reframeMode : false,
+    })),
+  setReframeMode: (on) => set({ reframeMode: on }),
 
   addImageItem: (assetId) =>
     set((s) => {
