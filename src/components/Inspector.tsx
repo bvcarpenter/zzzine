@@ -348,15 +348,15 @@ export function Inspector() {
           Upload image(s)
         </Button>
         {assets.length > 0 && (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="columns-3 gap-2">
             {assets.map((a) => (
-              <div key={a.id} className="group relative">
+              <div key={a.id} className="group relative mb-2 break-inside-avoid">
                 <button
                   title={`Place "${a.name}" in cell ${safeCell + 1}`}
                   onClick={() => setCellImage(index, safeCell, a.id)}
-                  className="block aspect-square w-full overflow-hidden rounded border border-neutral-700 hover:border-violet-500"
+                  className="block w-full overflow-hidden rounded border border-neutral-700 hover:border-violet-500"
                 >
-                  <img src={a.dataUrl} alt={a.name} className="h-full w-full object-cover" />
+                  <img src={a.dataUrl} alt={a.name} className="block h-auto w-full" />
                 </button>
                 <button
                   title="Remove from library"

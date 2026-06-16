@@ -10,6 +10,13 @@ body,
   height: 100%;
 }
 
+/* Fill the exact visible viewport so the chrome (toolbar + side panels) never
+   scrolls away — only the designated panes scroll internally. dvh tracks the
+   real viewport on iPad/mobile where toolbars resize it. */
+#root {
+  height: 100dvh;
+}
+
 html {
   /* Avoid iOS double-tap zoom / scroll chaining; keep the editor put. */
   touch-action: manipulation;
@@ -19,6 +26,7 @@ html {
 
 body {
   margin: 0;
+  overflow: hidden;
   font-family:
     "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
