@@ -3,9 +3,9 @@ import { ImageIcon } from "lucide-react";
 import { ImageSlotCanvas } from "./ImageSlotCanvas";
 import { TextBlockView } from "./TextBlockView";
 import { useZine } from "../store";
-import { PAGE_HEIGHT_PT, PAGE_WIDTH_PT } from "../lib/constants";
 import { cellRects } from "../lib/layout";
-import type { Asset, PageImage } from "../types";
+import type { FrameSize } from "../lib/dims";
+import type { Asset, PageImage, SpanSlice } from "../types";
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v));
@@ -27,7 +27,7 @@ interface CellProps {
   width: number;
   height: number;
   selected: boolean;
-  spanSide: "left" | "right" | null;
+  span: SpanSlice | null;
 }
 
 function CellView({
@@ -40,7 +40,7 @@ function CellView({
   width,
   height,
   selected,
-  spanSide,
+  span,
 }: CellProps) {
   const focusCell = useZine((s) => s.focusCell);
   const updateCellImage = useZine((s) => s.updateCellImage);
@@ -61,8 +61,8 @@ function CellView({
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!pan.current || !image) return;
-    // A spanning image is fit to a double-width slot, so pan is half as fast.
-    const denomX = spanSide ? width * 2 : width;
+    // A spanning image is fit to a slot `count` frames wide, so pan slower.
+    const denomX = width * (span?.count ?? 1);
     const dx = (e.clientX - pan.current.startX) / denomX;
     const dy = (e.clientY - pan.current.startY) / height;
     updateCellImage(pageIndex, cellIndex, {
@@ -113,7 +113,7 @@ function CellView({
         asset={asset}
         width={width}
         height={height}
-        spanSide={spanSide}
+        span={span}
       />
       {!image && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-400/70">
@@ -129,10 +129,12 @@ interface Props {
   index: number;
   width: number;
   height: number;
+  /** Logical frame size (points) for this document kind. */
+  frame: FrameSize;
 }
 
-/** One editable booklet page: a grid of image cells plus text blocks. */
-export function EditablePage({ index, width, height }: Props) {
+/** One editable page/frame: a grid of image cells plus text blocks. */
+export function EditablePage({ index, width, height, frame }: Props) {
   const page = useZine((s) => s.doc.pages[index]);
   const assets = useZine((s) => s.assets);
   const selectedPageIndex = useZine((s) => s.selectedPageIndex);
@@ -144,12 +146,12 @@ export function EditablePage({ index, width, height }: Props) {
 
   if (!page) return null;
 
-  const pxPerPt = width / PAGE_WIDTH_PT;
+  const pxPerPt = width / frame.width;
   const active = index === selectedPageIndex;
   const rects = cellRects(
     page.layout,
-    page.gutter / PAGE_WIDTH_PT,
-    page.gutter / PAGE_HEIGHT_PT,
+    page.gutter / frame.width,
+    page.gutter / frame.height,
   );
 
   const assetFor = (img: PageImage | null) =>
@@ -179,7 +181,7 @@ export function EditablePage({ index, width, height }: Props) {
           width={r.w * width}
           height={r.h * height}
           selected={active && ci === selectedCellIndex}
-          spanSide={ci === 0 ? (page.span ?? null) : null}
+          span={ci === 0 ? (page.span ?? null) : null}
         />
       ))}
 

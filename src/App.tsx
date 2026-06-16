@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { TopBar } from "./components/TopBar";
 import { PageList } from "./components/PageList";
 import { SpreadView } from "./components/SpreadView";
+import { CarouselView } from "./components/CarouselView";
 import { Inspector } from "./components/Inspector";
 import { useZine } from "./store";
 import { uid } from "./lib/id";
@@ -17,6 +18,7 @@ import {
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  const kind = useZine((s) => s.doc.kind);
 
   // Restore the current (or most recent) draft on first load.
   useEffect(() => {
@@ -135,7 +137,7 @@ export default function App() {
       <TopBar />
       <div className="flex min-h-0 flex-1">
         <PageList />
-        <SpreadView />
+        {kind === "carousel" ? <CarouselView /> : <SpreadView />}
         <Inspector />
       </div>
     </div>

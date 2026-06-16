@@ -168,10 +168,10 @@ async function renderPageImage(
     ctx.save();
     ctx.translate(rect.x * w, rect.y * h);
     if (page.span && i === 0) {
-      // One half of a spread-spanning image: fit to a double-width slot.
-      if (page.span === "right") ctx.translate(-cw, 0);
+      // One slice of a spanning image: fit to a slot `count` frames wide.
+      ctx.translate(-page.span.index * cw, 0);
       drawImageSlot(ctx, el, asset.width, asset.height, cell!, {
-        width: cw * 2,
+        width: cw * page.span.count,
         height: ch,
       });
     } else {

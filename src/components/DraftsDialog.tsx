@@ -14,6 +14,7 @@ import {
 } from "../lib/storage";
 import { downloadProjectFile, readProjectFile } from "../lib/projectFile";
 import { Button } from "./ui";
+import type { DocKind } from "../types";
 
 function timeAgo(ts: number): string {
   const s = Math.round((Date.now() - ts) / 1000);
@@ -50,9 +51,9 @@ export function DraftsDialog({ onClose }: { onClose: () => void }) {
   };
 
   /** Start a fresh, empty draft (no dialog close). */
-  const createBlank = async (): Promise<void> => {
+  const createBlank = async (kind: DocKind = "zine"): Promise<void> => {
     const id = uid("draft");
-    useZine.getState().newProject();
+    useZine.getState().newProject(kind);
     useZine.getState().setCurrentDraftId(id);
     const { doc, assets } = useZine.getState();
     await saveDraft(id, doc.title, { doc, assets });
@@ -64,8 +65,8 @@ export function DraftsDialog({ onClose }: { onClose: () => void }) {
     if (await switchTo(id)) onClose();
   };
 
-  const newDraft = async () => {
-    await createBlank();
+  const newDraft = async (kind: DocKind) => {
+    await createBlank(kind);
     onClose();
   };
 
@@ -132,9 +133,13 @@ export function DraftsDialog({ onClose }: { onClose: () => void }) {
             Drafts
           </h2>
           <div className="flex items-center gap-2">
-            <Button variant="primary" onClick={newDraft}>
+            <Button variant="primary" onClick={() => newDraft("zine")}>
               <FilePlus2 size={15} />
               New zine
+            </Button>
+            <Button variant="default" onClick={() => newDraft("carousel")}>
+              <FilePlus2 size={15} />
+              New carousel
             </Button>
             <button
               onClick={onClose}

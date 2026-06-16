@@ -2,10 +2,11 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useElementSize } from "../hooks/useElementSize";
 import { EditablePage } from "./EditablePage";
 import { useZine } from "../store";
-import { PAGE_HEIGHT_PT, PAGE_WIDTH_PT } from "../lib/constants";
+import { frameSize } from "../lib/dims";
 import { buildSpreads, spreadIndexOf, spreadLabel } from "../lib/spreads";
 
-const SPREAD_ASPECT = (2 * PAGE_WIDTH_PT) / PAGE_HEIGHT_PT;
+const ZINE_FRAME = frameSize("zine");
+const SPREAD_ASPECT = (2 * ZINE_FRAME.width) / ZINE_FRAME.height;
 const PAD = 36;
 
 /** A blank "outside the booklet" panel for the open side of a cover spread. */
@@ -99,14 +100,24 @@ export function SpreadView() {
             style={{ width: spreadW, height: spreadH }}
           >
             {spread.left !== null ? (
-              <EditablePage index={spread.left} width={pageW} height={pageH} />
+              <EditablePage
+                index={spread.left}
+                width={pageW}
+                height={pageH}
+                frame={ZINE_FRAME}
+              />
             ) : (
               <EmptyHalf width={pageW} height={pageH} />
             )}
             {/* spine */}
             <div className="z-10 -mx-px w-0.5 bg-gradient-to-r from-black/30 via-black/50 to-black/30" />
             {spread.right !== null ? (
-              <EditablePage index={spread.right} width={pageW} height={pageH} />
+              <EditablePage
+                index={spread.right}
+                width={pageW}
+                height={pageH}
+                frame={ZINE_FRAME}
+              />
             ) : (
               <EmptyHalf width={pageW} height={pageH} />
             )}

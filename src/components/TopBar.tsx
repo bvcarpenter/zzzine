@@ -9,6 +9,7 @@ import { DraftsDialog } from "./DraftsDialog";
 export function TopBar() {
   const title = useZine((s) => s.doc.title);
   const setTitle = useZine((s) => s.setTitle);
+  const kind = useZine((s) => s.doc.kind);
   const canUndo = useHistory((s) => s.canUndo);
   const canRedo = useHistory((s) => s.canRedo);
 
@@ -58,7 +59,7 @@ export function TopBar() {
         </Button>
         <Button variant="primary" onClick={() => setShowExport(true)}>
           <Download size={15} />
-          Export PDF
+          {kind === "carousel" ? "Export ZIP" : "Export PDF"}
         </Button>
       </div>
 

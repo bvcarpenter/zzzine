@@ -11,14 +11,9 @@ import {
 } from "lucide-react";
 import { useZine } from "../store";
 import { importImageFile } from "../lib/image";
-import {
-  MAX_PAGES,
-  MIN_PAGES,
-  PAGES_PER_SHEET,
-  PAGE_HEIGHT_PT,
-  PAGE_WIDTH_PT,
-} from "../lib/constants";
+import { MAX_PAGES, MIN_PAGES, PAGES_PER_SHEET } from "../lib/constants";
 import { LAYOUTS, layoutDef } from "../lib/layout";
+import { frameSize, MAX_SLIDES, MIN_SLIDES, type FrameSize } from "../lib/dims";
 import { wrapLines } from "../lib/textlayout";
 import type {
   FitMode,
@@ -32,8 +27,8 @@ import { fontCss, getFont } from "../lib/fonts";
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
-/** Estimate a text block's rendered height as a fraction of the page. */
-function textHeightFraction(block: TextBlock): number {
+/** Estimate a text block's rendered height as a fraction of the frame. */
+function textHeightFraction(block: TextBlock, frame: FrameSize): number {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   const def = getFont(block.fontFamily);
@@ -42,7 +37,7 @@ function textHeightFraction(block: TextBlock): number {
   let lineCount = 1;
   if (ctx) {
     ctx.font = `${style}${weight}${block.fontSize}px ${fontCss(block.fontFamily)}`;
-    const maxWidth = block.width * PAGE_WIDTH_PT;
+    const maxWidth = block.width * frame.width;
     lineCount = Math.max(
       1,
       wrapLines(block.text || " ", maxWidth, (t) => ctx.measureText(t).width)
@@ -50,7 +45,7 @@ function textHeightFraction(block: TextBlock): number {
     );
   }
   const heightPt = lineCount * block.fontSize * block.lineHeight;
-  return heightPt / PAGE_HEIGHT_PT;
+  return heightPt / frame.height;
 }
 import {
   Button,
@@ -94,10 +89,13 @@ export function Inspector() {
   const selectedTextId = useZine((s) => s.selectedTextId);
 
   const setPageCount = useZine((s) => s.setPageCount);
+  const addPage = useZine((s) => s.addPage);
+  const removePage = useZine((s) => s.removePage);
   const setPageBackground = useZine((s) => s.setPageBackground);
   const setPageLayout = useZine((s) => s.setPageLayout);
   const setPageGutter = useZine((s) => s.setPageGutter);
   const toggleSpan = useZine((s) => s.toggleSpan);
+  const setCarouselSpan = useZine((s) => s.setCarouselSpan);
   const addText = useZine((s) => s.addText);
   const addAsset = useZine((s) => s.addAsset);
   const removeAsset = useZine((s) => s.removeAsset);
@@ -112,6 +110,8 @@ export function Inspector() {
 
   if (!page) return <div className="w-[300px] shrink-0" />;
 
+  const isCarousel = doc.kind === "carousel";
+  const frame = frameSize(doc.kind);
   const safeCell = Math.min(cellIndex, page.cells.length - 1);
   const img = page.cells[safeCell] ?? null;
   const selectedText = page.texts.find((t) => t.id === selectedTextId) ?? null;
@@ -119,13 +119,17 @@ export function Inspector() {
   const spanning = !!page.span;
   const multiCell = page.cells.length > 1 && !spanning;
 
-  // Interior pages span their facing spread; the covers wrap around (an image
-  // across the back and front cover).
+  // Zine: interior pages span their facing spread; covers wrap around.
   const isCover = index === 0 || index === total - 1;
-  const canSpan = total >= 4;
+  const canSpan = !isCarousel && total >= 4;
   const spanLabel = isCover
     ? "Wrap photo across covers"
     : "Span image across spread";
+
+  // Carousel: span a panorama across N consecutive frames from this one.
+  const spanStart = page.span ? index - page.span.index : index;
+  const spanCount = page.span ? page.span.count : 1;
+  const maxSpan = Math.min(6, total - spanStart);
 
   const onPickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -163,42 +167,95 @@ export function Inspector() {
         onChange={(e) => onPickFiles(e.target.files)}
       />
 
-      {/* Booklet */}
-      <Section title="Booklet">
-        <Field label="Pages">
-          <Button
-            variant="ghost"
-            disabled={total <= MIN_PAGES}
-            onClick={() => setPageCount(total - PAGES_PER_SHEET)}
-            className="!px-2"
-          >
-            −4
-          </Button>
-          <span className="w-8 text-center text-sm font-medium">{total}</span>
-          <Button
-            variant="ghost"
-            disabled={total >= MAX_PAGES}
-            onClick={() => setPageCount(total + PAGES_PER_SHEET)}
-            className="!px-2"
-          >
-            +4
-          </Button>
-        </Field>
-        <p className="text-xs text-neutral-500">
-          {total / PAGES_PER_SHEET} folded sheet
-          {total / PAGES_PER_SHEET === 1 ? "" : "s"}. Pages come in multiples of
-          4.
-        </p>
-      </Section>
+      {/* Booklet / Carousel */}
+      {isCarousel ? (
+        <Section title="Carousel">
+          <Field label="Slides">
+            <Button
+              variant="ghost"
+              disabled={total <= MIN_SLIDES}
+              onClick={() => removePage(index)}
+              className="!px-2"
+            >
+              −
+            </Button>
+            <span className="w-8 text-center text-sm font-medium">{total}</span>
+            <Button
+              variant="ghost"
+              disabled={total >= MAX_SLIDES}
+              onClick={addPage}
+              className="!px-2"
+            >
+              +
+            </Button>
+          </Field>
+          <p className="text-xs text-neutral-500">
+            4:5 portrait, exported at 1080×1350. Up to {MAX_SLIDES} slides.
+          </p>
+        </Section>
+      ) : (
+        <Section title="Booklet">
+          <Field label="Pages">
+            <Button
+              variant="ghost"
+              disabled={total <= MIN_PAGES}
+              onClick={() => setPageCount(total - PAGES_PER_SHEET)}
+              className="!px-2"
+            >
+              −4
+            </Button>
+            <span className="w-8 text-center text-sm font-medium">{total}</span>
+            <Button
+              variant="ghost"
+              disabled={total >= MAX_PAGES}
+              onClick={() => setPageCount(total + PAGES_PER_SHEET)}
+              className="!px-2"
+            >
+              +4
+            </Button>
+          </Field>
+          <p className="text-xs text-neutral-500">
+            {total / PAGES_PER_SHEET} folded sheet
+            {total / PAGES_PER_SHEET === 1 ? "" : "s"}. Pages come in multiples
+            of 4.
+          </p>
+        </Section>
+      )}
 
-      {/* Page */}
-      <Section title={`Page ${index + 1}`}>
+      {/* Page / Slide */}
+      <Section title={isCarousel ? `Slide ${index + 1}` : `Page ${index + 1}`}>
         {canSpan && (
           <Toggle
             label={spanLabel}
             checked={spanning}
             onChange={() => toggleSpan(index)}
           />
+        )}
+        {isCarousel && total > 1 && (
+          <div>
+            <span className="text-xs text-neutral-400">
+              Span photo across frames
+            </span>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {Array.from({ length: maxSpan }, (_, k) => k + 1).map((c) => (
+                <Button
+                  key={c}
+                  variant={spanCount === c ? "primary" : "ghost"}
+                  className="!px-3"
+                  title={c === 1 ? "No span" : `Span ${c} frames`}
+                  onClick={() => setCarouselSpan(spanStart, c)}
+                >
+                  {c}
+                </Button>
+              ))}
+            </div>
+            {spanCount > 1 && (
+              <p className="mt-1 text-xs text-neutral-500">
+                One photo spans slides {spanStart + 1}–{spanStart + spanCount}.
+                Edits apply to all of them.
+              </p>
+            )}
+          </div>
         )}
         {!spanning && (
           <>
@@ -236,7 +293,7 @@ export function Inspector() {
             </Field>
           </>
         )}
-        {spanning && (
+        {spanning && !isCarousel && (
           <p className="text-xs text-neutral-500">
             {isCover
               ? "This photo wraps across the back and front covers. Edits apply to both."
@@ -393,6 +450,7 @@ export function Inspector() {
         <TextControls
           key={selectedText.id}
           block={selectedText}
+          frame={frame}
           onChange={(p) => updateText(index, selectedText.id, p)}
           onDelete={() => removeText(index, selectedText.id)}
           onFront={() => bringTextToFront(index, selectedText.id)}
@@ -433,7 +491,8 @@ export function Inspector() {
         )}
       </Section>
 
-      {/* Page numbers */}
+      {/* Page numbers (zine only) */}
+      {!isCarousel && (
       <Section title="Page numbers">
         <Toggle
           label="Show page numbers"
@@ -489,17 +548,20 @@ export function Inspector() {
           </>
         )}
       </Section>
+      )}
     </aside>
   );
 }
 
 function TextControls({
   block,
+  frame,
   onChange,
   onDelete,
   onFront,
 }: {
   block: TextBlock;
+  frame: FrameSize;
   onChange: (p: Partial<TextBlock>) => void;
   onDelete: () => void;
   onFront: () => void;
@@ -597,7 +659,7 @@ function TextControls({
             variant="ghost"
             title="Center vertically"
             onClick={() =>
-              onChange({ y: clamp01((1 - textHeightFraction(block)) / 2) })
+              onChange({ y: clamp01((1 - textHeightFraction(block, frame)) / 2) })
             }
           >
             ↕ Down
@@ -608,7 +670,7 @@ function TextControls({
             onClick={() =>
               onChange({
                 x: clamp01((1 - block.width) / 2),
-                y: clamp01((1 - textHeightFraction(block)) / 2),
+                y: clamp01((1 - textHeightFraction(block, frame)) / 2),
               })
             }
           >

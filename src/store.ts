@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   Asset,
+  DocKind,
   LayoutKind,
   Page,
   PageImage,
@@ -8,8 +9,9 @@ import type {
   TextBlock,
   Zine,
 } from "./types";
-import { createPage, createTextBlock, createZine } from "./lib/factory";
+import { createDoc, createPage, createTextBlock } from "./lib/factory";
 import { MAX_PAGES, MIN_PAGES } from "./lib/constants";
+import { MAX_SLIDES, MIN_SLIDES } from "./lib/dims";
 import { roundUpToSheet } from "./lib/imposition";
 import { cellCount } from "./lib/layout";
 import { buildSpreads } from "./lib/spreads";
@@ -29,7 +31,7 @@ interface ZineState {
 
   // --- lifecycle ---
   hydrate: (doc: Zine, assets: Asset[]) => void;
-  newProject: () => void;
+  newProject: (kind?: DocKind) => void;
   setCurrentDraftId: (id: string | null) => void;
   /** Replace the whole document + assets (used by undo/redo). */
   replaceState: (doc: Zine, assets: Asset[]) => void;
@@ -37,6 +39,8 @@ interface ZineState {
   // --- document-level ---
   setTitle: (title: string) => void;
   setPageCount: (count: number) => void;
+  addPage: () => void;
+  removePage: (index: number) => void;
   setPageNumbers: (partial: Partial<PageNumberSettings>) => void;
 
   // --- selection ---
@@ -50,8 +54,10 @@ interface ZineState {
   setPageBackground: (index: number, color: string) => void;
   setPageLayout: (index: number, layout: LayoutKind) => void;
   setPageGutter: (index: number, gutter: number) => void;
-  /** Toggle a full-spread image across the two facing pages of a spread. */
+  /** Toggle a zine spread/cover spanning image across two facing pages. */
   toggleSpan: (index: number) => void;
+  /** Span an image across `count` consecutive carousel frames from `start`. */
+  setCarouselSpan: (start: number, count: number) => void;
   movePage: (from: number, to: number) => void;
 
   // --- assets / cells ---
@@ -90,6 +96,10 @@ function withPage(pages: Page[], index: number, fn: (p: Page) => Page): Page[] {
   return pages.map((p, i) => (i === index ? fn(p) : p));
 }
 
+function clearAllSpans(pages: Page[]): Page[] {
+  return pages.map((p) => (p.span ? { ...p, span: undefined } : p));
+}
+
 /** The interior spread {left,right} containing `index`, or null for covers. */
 function interiorSpread(pageCount: number, index: number) {
   const sp = buildSpreads(pageCount).find(
@@ -100,11 +110,11 @@ function interiorSpread(pageCount: number, index: number) {
 }
 
 /**
- * The pair of pages an image can span across, given a page. Interior pages
- * span their facing reader-spread; the covers (first/last page) span each
- * other as a wrap-around — back cover on the left, front cover on the right.
+ * The pair of zine pages an image spans, given a page. Interior pages span
+ * their facing reader-spread; the covers (first/last page) wrap around — back
+ * cover on the left, front cover on the right.
  */
-function spanGroup(pageCount: number, index: number) {
+function zineSpanGroup(pageCount: number, index: number) {
   if (pageCount < 4) return null;
   if (index === 0 || index === pageCount - 1) {
     return { left: pageCount - 1, right: 0 };
@@ -112,11 +122,27 @@ function spanGroup(pageCount: number, index: number) {
   return interiorSpread(pageCount, index);
 }
 
+/** All page indices in the span group containing `index` (in slice order). */
+function spanMembers(doc: Zine, index: number): number[] {
+  const page = doc.pages[index];
+  if (!page?.span) return [index];
+  if (doc.kind === "carousel") {
+    const start = index - page.span.index;
+    const members: number[] = [];
+    for (let i = start; i < start + page.span.count; i++) {
+      if (i >= 0 && i < doc.pages.length) members.push(i);
+    }
+    return members.length ? members : [index];
+  }
+  const g = zineSpanGroup(doc.pages.length, index);
+  return g ? [g.left, g.right] : [index];
+}
+
 const clampPageCount = (n: number) =>
   Math.min(MAX_PAGES, Math.max(MIN_PAGES, roundUpToSheet(n)));
 
 export const useZine = create<ZineState>((set) => ({
-  doc: createZine(),
+  doc: createDoc("zine"),
   assets: [],
   selectedPageIndex: 0,
   selectedCellIndex: 0,
@@ -134,9 +160,9 @@ export const useZine = create<ZineState>((set) => ({
       revision: 0,
     }),
 
-  newProject: () =>
+  newProject: (kind = "zine") =>
     set((s) => ({
-      doc: createZine(),
+      doc: createDoc(kind),
       assets: [],
       selectedPageIndex: 0,
       selectedCellIndex: 0,
@@ -176,6 +202,33 @@ export const useZine = create<ZineState>((set) => ({
       return {
         doc: { ...s.doc, pages },
         selectedPageIndex,
+        selectedCellIndex: 0,
+        selectedTextId: null,
+        revision: s.revision + 1,
+      };
+    }),
+
+  addPage: () =>
+    set((s) => {
+      if (s.doc.pages.length >= MAX_SLIDES) return s;
+      const pages = [...s.doc.pages, createPage()];
+      return {
+        doc: { ...s.doc, pages },
+        selectedPageIndex: pages.length - 1,
+        selectedCellIndex: 0,
+        selectedTextId: null,
+        revision: s.revision + 1,
+      };
+    }),
+
+  removePage: (index) =>
+    set((s) => {
+      if (s.doc.pages.length <= MIN_SLIDES) return s;
+      // Removing shifts indices, which would break position-based spans.
+      const pages = clearAllSpans(s.doc.pages).filter((_, i) => i !== index);
+      return {
+        doc: { ...s.doc, pages },
+        selectedPageIndex: Math.min(s.selectedPageIndex, pages.length - 1),
         selectedCellIndex: 0,
         selectedTextId: null,
         revision: s.revision + 1,
@@ -224,10 +277,10 @@ export const useZine = create<ZineState>((set) => ({
   setPageLayout: (index, layout) =>
     set((s) => {
       const count = cellCount(layout);
-      // Choosing a grid layout exits span mode (clear both facing pages).
-      const partner = s.doc.pages[index].span
-        ? spanGroup(s.doc.pages.length, index)
-        : null;
+      // Choosing a grid layout exits span mode for the whole group.
+      const members = new Set(
+        s.doc.pages[index].span ? spanMembers(s.doc, index) : [],
+      );
       const pages = s.doc.pages.map((p, i) => {
         if (i === index) {
           return {
@@ -237,9 +290,7 @@ export const useZine = create<ZineState>((set) => ({
             cells: Array.from({ length: count }, (_, j) => p.cells[j] ?? null),
           };
         }
-        if (partner && (i === partner.left || i === partner.right)) {
-          return { ...p, span: undefined };
-        }
+        if (members.has(i)) return { ...p, span: undefined };
         return p;
       });
       return {
@@ -251,25 +302,76 @@ export const useZine = create<ZineState>((set) => ({
 
   toggleSpan: (index) =>
     set((s) => {
-      const sp = spanGroup(s.doc.pages.length, index);
-      if (!sp) return s; // need at least one folded sheet to span
-      const spanning = !!s.doc.pages[sp.left].span;
+      const g = zineSpanGroup(s.doc.pages.length, index);
+      if (!g) return s;
+      const spanning = !!s.doc.pages[g.left].span;
       const shared =
-        s.doc.pages[sp.left].cells[0] ?? s.doc.pages[sp.right].cells[0] ?? null;
+        s.doc.pages[g.left].cells[0] ?? s.doc.pages[g.right].cells[0] ?? null;
       const pages = s.doc.pages.map((p, i) => {
-        if (i === sp.left) {
+        if (i === g.left) {
           return spanning
             ? { ...p, span: undefined }
-            : { ...p, layout: "single" as LayoutKind, span: "left" as const, cells: [shared] };
+            : {
+                ...p,
+                layout: "single" as LayoutKind,
+                span: { count: 2, index: 0 },
+                cells: [shared],
+              };
         }
-        if (i === sp.right) {
+        if (i === g.right) {
           return spanning
             ? { ...p, span: undefined }
-            : { ...p, layout: "single" as LayoutKind, span: "right" as const, cells: [shared] };
+            : {
+                ...p,
+                layout: "single" as LayoutKind,
+                span: { count: 2, index: 1 },
+                cells: [shared],
+              };
         }
         return p;
       });
-      return { doc: { ...s.doc, pages }, selectedCellIndex: 0, revision: s.revision + 1 };
+      return {
+        doc: { ...s.doc, pages },
+        selectedCellIndex: 0,
+        revision: s.revision + 1,
+      };
+    }),
+
+  setCarouselSpan: (start, count) =>
+    set((s) => {
+      const len = s.doc.pages.length;
+      const n = Math.max(1, Math.min(count, len - start));
+      const newEnd = n > 1 ? start + n - 1 : start;
+      const pages = s.doc.pages.slice();
+
+      // Clear any existing span group that overlaps the target range.
+      for (let i = 0; i < len; i++) {
+        const sp = pages[i].span;
+        if (!sp) continue;
+        const gs = i - sp.index;
+        const ge = gs + sp.count - 1;
+        if (gs <= newEnd && start <= ge) pages[i] = { ...pages[i], span: undefined };
+      }
+
+      if (n > 1) {
+        let shared: PageImage | null = null;
+        for (let i = start; i < start + n; i++) shared = shared ?? pages[i].cells[0] ?? null;
+        for (let j = 0; j < n; j++) {
+          const i = start + j;
+          pages[i] = {
+            ...pages[i],
+            layout: "single",
+            cells: [shared],
+            span: { count: n, index: j },
+          };
+        }
+      }
+
+      return {
+        doc: { ...s.doc, pages },
+        selectedCellIndex: 0,
+        revision: s.revision + 1,
+      };
     }),
 
   setPageGutter: (index, gutter) =>
@@ -284,11 +386,13 @@ export const useZine = create<ZineState>((set) => ({
   movePage: (from, to) =>
     set((s) => {
       if (to < 0 || to >= s.doc.pages.length || from === to) return s;
-      const pages = [...s.doc.pages];
-      const [moved] = pages.splice(from, 1);
-      pages.splice(to, 0, moved);
+      // Reordering breaks position-based spans; clear them for carousels.
+      const base =
+        s.doc.kind === "carousel" ? clearAllSpans(s.doc.pages) : [...s.doc.pages];
+      const [moved] = base.splice(from, 1);
+      base.splice(to, 0, moved);
       return {
-        doc: { ...s.doc, pages },
+        doc: { ...s.doc, pages: base },
         selectedPageIndex: to,
         revision: s.revision + 1,
       };
@@ -313,93 +417,56 @@ export const useZine = create<ZineState>((set) => ({
   setCellImage: (index, cellIndex, assetId) =>
     set((s) => {
       const page = s.doc.pages[index];
-      const sp = page?.span && cellIndex === 0
-        ? spanGroup(s.doc.pages.length, index)
-        : null;
-      if (sp) {
-        const existing = page.cells[0];
-        const img =
-          existing && existing.assetId === assetId
-            ? existing
-            : defaultImage(assetId);
-        const pages = s.doc.pages.map((p, i) =>
-          i === sp.left || i === sp.right ? { ...p, cells: [img] } : p,
-        );
-        return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
-      }
-      return {
-        doc: {
-          ...s.doc,
-          pages: withPage(s.doc.pages, index, (p) => ({
-            ...p,
-            cells: p.cells.map((c, i) =>
-              i === cellIndex
-                ? c && c.assetId === assetId
-                  ? c
-                  : defaultImage(assetId)
-                : c,
-            ),
-          })),
-        },
-        revision: s.revision + 1,
-      };
+      if (!page) return s;
+      const isSpan = !!page.span && cellIndex === 0;
+      const members = new Set(isSpan ? spanMembers(s.doc, index) : [index]);
+      const existing = page.cells[isSpan ? 0 : cellIndex];
+      const img =
+        existing && existing.assetId === assetId
+          ? existing
+          : defaultImage(assetId);
+      const pages = s.doc.pages.map((p, i) => {
+        if (!members.has(i)) return p;
+        if (isSpan) return { ...p, cells: [img] };
+        return {
+          ...p,
+          cells: p.cells.map((c, ci) => (ci === cellIndex ? img : c)),
+        };
+      });
+      return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
     }),
 
   updateCellImage: (index, cellIndex, partial) =>
     set((s) => {
       const page = s.doc.pages[index];
-      const sp = page?.span && cellIndex === 0
-        ? spanGroup(s.doc.pages.length, index)
-        : null;
-      if (sp) {
-        const pages = s.doc.pages.map((p, i) =>
-          i === sp.left || i === sp.right
-            ? {
-                ...p,
-                cells: p.cells.map((c, j) =>
-                  j === 0 && c ? { ...c, ...partial } : c,
-                ),
-              }
-            : p,
-        );
-        return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
-      }
-      return {
-        doc: {
-          ...s.doc,
-          pages: withPage(s.doc.pages, index, (p) => ({
-            ...p,
-            cells: p.cells.map((c, i) =>
-              i === cellIndex && c ? { ...c, ...partial } : c,
-            ),
-          })),
-        },
-        revision: s.revision + 1,
-      };
+      if (!page) return s;
+      const isSpan = !!page.span && cellIndex === 0;
+      const members = new Set(isSpan ? spanMembers(s.doc, index) : [index]);
+      const target = isSpan ? 0 : cellIndex;
+      const pages = s.doc.pages.map((p, i) => {
+        if (!members.has(i)) return p;
+        return {
+          ...p,
+          cells: p.cells.map((c, ci) =>
+            ci === target && c ? { ...c, ...partial } : c,
+          ),
+        };
+      });
+      return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
     }),
 
   clearCell: (index, cellIndex) =>
     set((s) => {
       const page = s.doc.pages[index];
-      const sp = page?.span && cellIndex === 0
-        ? spanGroup(s.doc.pages.length, index)
-        : null;
-      if (sp) {
-        const pages = s.doc.pages.map((p, i) =>
-          i === sp.left || i === sp.right ? { ...p, cells: [null] } : p,
-        );
-        return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
-      }
-      return {
-        doc: {
-          ...s.doc,
-          pages: withPage(s.doc.pages, index, (p) => ({
-            ...p,
-            cells: p.cells.map((c, i) => (i === cellIndex ? null : c)),
-          })),
-        },
-        revision: s.revision + 1,
-      };
+      if (!page) return s;
+      const isSpan = !!page.span && cellIndex === 0;
+      const members = new Set(isSpan ? spanMembers(s.doc, index) : [index]);
+      const target = isSpan ? 0 : cellIndex;
+      const pages = s.doc.pages.map((p, i) => {
+        if (!members.has(i)) return p;
+        return { ...p, cells: p.cells.map((c, ci) => (ci === target ? null : c)) };
+      });
+      return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
     }),
 
   addText: (index) =>

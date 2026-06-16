@@ -1,23 +1,25 @@
 import { ImageSlotCanvas } from "./ImageSlotCanvas";
 import { TextBlockView } from "./TextBlockView";
-import { PAGE_ASPECT, PAGE_HEIGHT_PT, PAGE_WIDTH_PT } from "../lib/constants";
 import { cellRects } from "../lib/layout";
-import type { Asset, Page } from "../types";
+import { frameSize } from "../lib/dims";
+import type { Asset, DocKind, Page } from "../types";
 
 interface Props {
   page: Page;
   assets: Asset[];
   width: number;
+  kind: DocKind;
 }
 
-/** Small non-interactive preview of a page (all cells + text). */
-export function PageThumbnail({ page, assets, width }: Props) {
-  const height = width / PAGE_ASPECT;
-  const pxPerPt = width / PAGE_WIDTH_PT;
+/** Small non-interactive preview of a page/frame (all cells + text). */
+export function PageThumbnail({ page, assets, width, kind }: Props) {
+  const frame = frameSize(kind);
+  const height = width / (frame.width / frame.height);
+  const pxPerPt = width / frame.width;
   const rects = cellRects(
     page.layout,
-    page.gutter / PAGE_WIDTH_PT,
-    page.gutter / PAGE_HEIGHT_PT,
+    page.gutter / frame.width,
+    page.gutter / frame.height,
   );
 
   return (
@@ -44,7 +46,7 @@ export function PageThumbnail({ page, assets, width }: Props) {
               asset={asset}
               width={r.w * width}
               height={r.h * height}
-              spanSide={ci === 0 ? (page.span ?? null) : null}
+              span={ci === 0 ? (page.span ?? null) : null}
             />
           </div>
         );

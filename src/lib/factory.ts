@@ -3,7 +3,9 @@
 import { DEFAULT_PAGES } from "./constants";
 import { DEFAULT_FONT_KEY } from "./fonts";
 import { uid } from "./id";
-import type { Page, TextBlock, Zine } from "../types";
+import type { DocKind, Page, TextBlock, Zine } from "../types";
+
+const DEFAULT_SLIDES = 3;
 
 export function createPage(): Page {
   return {
@@ -37,11 +39,13 @@ export function createTextBlock(partial: Partial<TextBlock> = {}): TextBlock {
   };
 }
 
-export function createZine(pageCount: number = DEFAULT_PAGES): Zine {
+export function createDoc(kind: DocKind = "zine"): Zine {
+  const count = kind === "carousel" ? DEFAULT_SLIDES : DEFAULT_PAGES;
   return {
     version: 1,
-    title: "Untitled zine",
-    pages: Array.from({ length: pageCount }, () => createPage()),
+    kind,
+    title: kind === "carousel" ? "Untitled carousel" : "Untitled zine",
+    pages: Array.from({ length: count }, () => createPage()),
     pageNumbers: {
       enabled: false,
       fontFamily: DEFAULT_FONT_KEY,
@@ -52,4 +56,9 @@ export function createZine(pageCount: number = DEFAULT_PAGES): Zine {
       startAt: 1,
     },
   };
+}
+
+/** Back-compat alias used in a few places. */
+export function createZine(): Zine {
+  return createDoc("zine");
 }

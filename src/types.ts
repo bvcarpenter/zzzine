@@ -28,6 +28,17 @@ export interface PageImage {
 export type TextAlign = "left" | "center" | "right";
 export type VerticalAnchor = "top" | "middle" | "bottom";
 
+/** A document is either a folded-booklet zine or an Instagram carousel. */
+export type DocKind = "zine" | "carousel";
+
+/** One frame's slice of an image spanning several frames. */
+export interface SpanSlice {
+  /** Total number of frames the image spans. */
+  count: number;
+  /** This frame's position within the span (0-based). */
+  index: number;
+}
+
 /** A text block (caption, title, or text-over-image) placed on a page. */
 export interface TextBlock {
   id: string;
@@ -74,11 +85,11 @@ export interface Page {
   /** Gap between and around cells, in points. */
   gutter: number;
   /**
-   * When set, this page shows one half of an image spanning the whole reader
-   * spread. The two facing pages share the same cells[0] image; this flag says
-   * which half to show. Forces a single-cell layout.
+   * When set, this page shows one slice of an image spanning several frames
+   * (a zine spread/cover pair = 2; a carousel panorama = N). The frames in the
+   * group share the same cells[0] image. Forces a single-cell layout.
    */
-  span?: "left" | "right";
+  span?: SpanSlice;
   texts: TextBlock[];
 }
 
@@ -104,7 +115,10 @@ export interface PageNumberSettings {
 export interface Zine {
   /** Schema version, for migrating saved projects. */
   version: 1;
+  /** Whether this is a folded-booklet zine or an Instagram carousel. */
+  kind: DocKind;
   title: string;
+  /** Pages (zine) or slides (carousel). */
   pages: Page[];
   pageNumbers: PageNumberSettings;
 }
