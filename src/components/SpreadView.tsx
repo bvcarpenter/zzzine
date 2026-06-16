@@ -65,7 +65,7 @@ export function SpreadView() {
   const pageH = spreadH;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-neutral-900">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-neutral-900">
       {/* Spread navigation */}
       <div className="flex items-center justify-center gap-4 border-b border-neutral-800 px-4 py-2">
         <button
