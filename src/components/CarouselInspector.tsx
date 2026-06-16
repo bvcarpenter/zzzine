@@ -231,7 +231,7 @@ export function CarouselInspector() {
                 <button
                   title="Remove from library"
                   onClick={() => removeAsset(a.id)}
-                  className="absolute right-1 top-1 rounded bg-black/70 p-0.5 text-white opacity-0 transition group-hover:opacity-100"
+                  className="absolute right-1 top-1 rounded bg-black/70 p-1 text-white opacity-0 transition group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                 >
                   <Trash2 size={12} />
                 </button>

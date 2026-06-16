@@ -1,20 +1,11 @@
 import { useRef } from "react";
 import { ImageSlotCanvas } from "./ImageSlotCanvas";
 import { useZine } from "../store";
+import { useDragPinch } from "../hooks/useDragPinch";
 import type { Asset, ImageItem } from "../types";
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v));
-
-interface DragState {
-  mode: "move" | "resize";
-  sx: number;
-  sy: number;
-  bx: number;
-  by: number;
-  bw: number;
-  bh: number;
-}
 
 interface Props {
   item: ImageItem;
@@ -24,52 +15,58 @@ interface Props {
   selected: boolean;
 }
 
-/** A free-form image on the carousel canvas: drag to move, corner to resize. */
+/** A free-form image on the carousel canvas: drag to move, pinch to zoom,
+ *  corner handle to resize. */
 export function ImageItemView({ item, asset, canvasW, canvasH, selected }: Props) {
   const selectItem = useZine((s) => s.selectItem);
   const updateImageItem = useZine((s) => s.updateImageItem);
-  const drag = useRef<DragState | null>(null);
+  const base = useRef({ x: 0, y: 0, zoom: 1 });
+  const resize = useRef<{ sx: number; sy: number; bw: number; bh: number } | null>(
+    null,
+  );
 
   const left = item.x * canvasW;
   const top = item.y * canvasH;
   const width = item.w * canvasW;
   const height = item.h * canvasH;
 
-  const begin = (mode: DragState["mode"]) => (e: React.PointerEvent) => {
+  const gesture = useDragPinch({
+    onSelect: () => selectItem(item.id),
+    onDragStart: () => {
+      base.current = { ...base.current, x: item.x, y: item.y };
+    },
+    onDragMove: (dx, dy) => {
+      updateImageItem(item.id, {
+        x: clamp(base.current.x + dx / canvasW, -item.w + 0.04, 1 - 0.04),
+        y: clamp(base.current.y + dy / canvasH, -item.h + 0.04, 1 - 0.04),
+      });
+    },
+    onPinchStart: () => {
+      base.current = { ...base.current, zoom: item.zoom };
+    },
+    onPinchMove: (scale) => {
+      updateImageItem(item.id, {
+        zoom: Math.round(clamp(base.current.zoom * scale, 0.2, 6) * 100) / 100,
+      });
+    },
+  });
+
+  const onResizeDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     selectItem(item.id);
-    drag.current = {
-      mode,
-      sx: e.clientX,
-      sy: e.clientY,
-      bx: item.x,
-      by: item.y,
-      bw: item.w,
-      bh: item.h,
-    };
+    resize.current = { sx: e.clientX, sy: e.clientY, bw: item.w, bh: item.h };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const d = drag.current;
-    if (!d) return;
-    const dx = (e.clientX - d.sx) / canvasW;
-    const dy = (e.clientY - d.sy) / canvasH;
-    if (d.mode === "move") {
-      updateImageItem(item.id, {
-        x: clamp(d.bx + dx, -d.bw + 0.04, 1 - 0.04),
-        y: clamp(d.by + dy, -d.bh + 0.04, 1 - 0.04),
-      });
-    } else {
-      updateImageItem(item.id, {
-        w: clamp(d.bw + dx, 0.03, 4),
-        h: clamp(d.bh + dy, 0.03, 1.5),
-      });
-    }
+  const onResizeMove = (e: React.PointerEvent) => {
+    const r = resize.current;
+    if (!r) return;
+    updateImageItem(item.id, {
+      w: clamp(r.bw + (e.clientX - r.sx) / canvasW, 0.03, 4),
+      h: clamp(r.bh + (e.clientY - r.sy) / canvasH, 0.03, 1.5),
+    });
   };
-
-  const end = (e: React.PointerEvent) => {
-    drag.current = null;
+  const onResizeEnd = (e: React.PointerEvent) => {
+    resize.current = null;
     try {
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {
@@ -89,13 +86,7 @@ export function ImageItemView({ item, asset, canvasW, canvasH, selected }: Props
         touchAction: "none",
       }}
     >
-      <div
-        className="absolute inset-0 cursor-move overflow-hidden"
-        onPointerDown={begin("move")}
-        onPointerMove={onPointerMove}
-        onPointerUp={end}
-        onPointerCancel={end}
-      >
+      <div className="absolute inset-0 cursor-move touch-none overflow-hidden" {...gesture}>
         <ImageSlotCanvas
           image={{
             assetId: item.assetId,
@@ -115,12 +106,11 @@ export function ImageItemView({ item, asset, canvasW, canvasH, selected }: Props
       {selected && (
         <div
           title="Drag to resize"
-          onPointerDown={begin("resize")}
-          onPointerMove={onPointerMove}
-          onPointerUp={end}
-          onPointerCancel={end}
-          className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-se-resize rounded-sm border border-white bg-violet-600"
-          style={{ touchAction: "none" }}
+          onPointerDown={onResizeDown}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeEnd}
+          onPointerCancel={onResizeEnd}
+          className="absolute -bottom-2.5 -right-2.5 h-6 w-6 cursor-se-resize touch-none rounded-full border-2 border-white bg-violet-600 shadow"
         />
       )}
     </div>

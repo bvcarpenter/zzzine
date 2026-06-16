@@ -4,18 +4,12 @@ import { ImageSlotCanvas } from "./ImageSlotCanvas";
 import { TextBlockView } from "./TextBlockView";
 import { useZine } from "../store";
 import { cellRects } from "../lib/layout";
+import { useDragPinch } from "../hooks/useDragPinch";
 import type { FrameSize } from "../lib/dims";
 import type { Asset, PageImage, SpanSlice } from "../types";
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v));
-
-interface PanState {
-  startX: number;
-  startY: number;
-  baseX: number;
-  baseY: number;
-}
 
 interface CellProps {
   pageIndex: number;
@@ -44,41 +38,32 @@ function CellView({
 }: CellProps) {
   const focusCell = useZine((s) => s.focusCell);
   const updateCellImage = useZine((s) => s.updateCellImage);
-  const pan = useRef<PanState | null>(null);
+  const base = useRef({ x: 0, y: 0, zoom: 1 });
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    e.stopPropagation();
-    focusCell(pageIndex, cellIndex);
-    if (!image) return;
-    pan.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      baseX: image.offsetX,
-      baseY: image.offsetY,
-    };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!pan.current || !image) return;
-    // A spanning image is fit to a slot `count` frames wide, so pan slower.
-    const denomX = width * (span?.count ?? 1);
-    const dx = (e.clientX - pan.current.startX) / denomX;
-    const dy = (e.clientY - pan.current.startY) / height;
-    updateCellImage(pageIndex, cellIndex, {
-      offsetX: clamp(pan.current.baseX + dx, -1.5, 1.5),
-      offsetY: clamp(pan.current.baseY + dy, -1.5, 1.5),
-    });
-  };
-
-  const endPan = (e: React.PointerEvent) => {
-    pan.current = null;
-    try {
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-  };
+  const gesture = useDragPinch({
+    onSelect: () => focusCell(pageIndex, cellIndex),
+    onDragStart: () => {
+      if (image) base.current = { ...base.current, x: image.offsetX, y: image.offsetY };
+    },
+    onDragMove: (dx, dy) => {
+      if (!image) return;
+      // A spanning image is fit to a slot `count` frames wide, so pan slower.
+      const denomX = width * (span?.count ?? 1);
+      updateCellImage(pageIndex, cellIndex, {
+        offsetX: clamp(base.current.x + dx / denomX, -1.5, 1.5),
+        offsetY: clamp(base.current.y + dy / height, -1.5, 1.5),
+      });
+    },
+    onPinchStart: () => {
+      if (image) base.current = { ...base.current, zoom: image.zoom };
+    },
+    onPinchMove: (scale) => {
+      if (!image) return;
+      updateCellImage(pageIndex, cellIndex, {
+        zoom: Math.round(clamp(base.current.zoom * scale, 0.2, 6) * 100) / 100,
+      });
+    },
+  });
 
   const onWheel = (e: React.WheelEvent) => {
     if (!image) return;
@@ -91,7 +76,7 @@ function CellView({
 
   return (
     <div
-      className="absolute overflow-hidden"
+      className="absolute touch-none overflow-hidden"
       style={{
         left,
         top,
@@ -102,10 +87,7 @@ function CellView({
           : "1px solid rgba(255,255,255,0.12)",
         outlineOffset: "-1px",
       }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endPan}
-      onPointerCancel={endPan}
+      {...gesture}
       onWheel={onWheel}
     >
       <ImageSlotCanvas

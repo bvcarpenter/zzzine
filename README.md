@@ -47,6 +47,8 @@ Pick a project type when you start a new draft:
   changes like dragging coalesced into single steps.
 - **Multiple drafts.** Keep several zines in the browser, switch between them,
   rename, duplicate, and delete. The current draft autosaves as you work.
+- **Touch / iPad friendly.** Works with touch on iPad Pro (Chrome): drag to
+  move, pinch to zoom an image, and the browser won't zoom out from under you.
 - **Runs entirely in the browser.** Your images never leave your machine.
   Drafts are stored locally (IndexedDB); you can also export/import a project
   file for backup or sharing.

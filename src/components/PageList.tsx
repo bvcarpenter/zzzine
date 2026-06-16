@@ -56,7 +56,7 @@ export function PageList() {
                     </span>
                   </div>
                 </button>
-                <div className="absolute right-1 top-1 flex flex-col gap-1 opacity-0 transition group-hover:opacity-100">
+                <div className="absolute right-1 top-1 flex flex-col gap-1 opacity-0 transition group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                   <button
                     title="Move up"
                     disabled={i === 0}

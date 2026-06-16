@@ -10,6 +10,13 @@ body,
   height: 100%;
 }
 
+html {
+  /* Avoid iOS double-tap zoom / scroll chaining; keep the editor put. */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   font-family:
@@ -17,6 +24,17 @@ body {
     sans-serif;
   background: #0f0f11;
   color: #1a1a1a;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Text entry stays selectable/editable. */
+input,
+textarea,
+[contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Range inputs in the inspector. */
