@@ -67,11 +67,11 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           </div>
           <Section title="Instagram">
             <p className="text-xs leading-relaxed text-neutral-500">
-              Exports a <strong>.zip</strong> of {doc.pages.length} image
-              {doc.pages.length === 1 ? "" : "s"} at{" "}
-              <strong>1080×1350</strong> (4:5), numbered in order. Unzip and
-              upload them to a single Instagram post in sequence; slides that
-              share a spanning photo will line up as you swipe.
+              Slices the canvas into <strong>{doc.slideCount}</strong> images at{" "}
+              <strong>1080×1350</strong> (4:5), numbered in order, in a{" "}
+              <strong>.zip</strong>. Unzip and upload them to a single Instagram
+              post in sequence — anything spanning a cut line continues across
+              slides as you swipe.
             </p>
           </Section>
           {error && <div className="px-4 py-2 text-sm text-red-400">{error}</div>}

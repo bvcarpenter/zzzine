@@ -73,17 +73,39 @@ export type LayoutKind =
   | "three-v" // 3 stacked
   | "four"; // 2x2 grid
 
-/** One page of the zine (one half-letter face). */
+/** A free-form image placed on the carousel canvas (box + transforms). */
+export interface ImageItem {
+  id: string;
+  assetId: string;
+  /** Box on the canvas as fractions of the whole canvas (0..1). */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** How the image fills its box. */
+  fit: FitMode;
+  rotation: Rotation;
+  flipH: boolean;
+  flipV: boolean;
+  /** Pan within the box and zoom on top of fit. */
+  offsetX: number;
+  offsetY: number;
+  zoom: number;
+}
+
+/** One page of the zine (one half-letter face) or a carousel artboard. */
 export interface Page {
   id: string;
   /** Solid background color of the page. */
   background: string;
-  /** Image grid layout. */
+  /** Image grid layout (zine). */
   layout: LayoutKind;
-  /** One image slot per layout cell, in row-major order; null = empty. */
+  /** One image slot per layout cell, in row-major order; null = empty (zine). */
   cells: (PageImage | null)[];
-  /** Gap between and around cells, in points. */
+  /** Gap between and around cells, in points (zine). */
   gutter: number;
+  /** Free-form image items (carousel canvas), bottom-to-top. */
+  items: ImageItem[];
   /**
    * When set, this page shows one slice of an image spanning several frames
    * (a zine spread/cover pair = 2; a carousel panorama = N). The frames in the
@@ -118,8 +140,10 @@ export interface Zine {
   /** Whether this is a folded-booklet zine or an Instagram carousel. */
   kind: DocKind;
   title: string;
-  /** Pages (zine) or slides (carousel). */
+  /** Zine: the pages. Carousel: a single wide artboard at pages[0]. */
   pages: Page[];
+  /** Carousel: number of 4:5 slides the artboard is cut into on export. */
+  slideCount: number;
   pageNumbers: PageNumberSettings;
 }
 

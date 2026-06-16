@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { TopBar } from "./components/TopBar";
 import { PageList } from "./components/PageList";
 import { SpreadView } from "./components/SpreadView";
-import { CarouselView } from "./components/CarouselView";
+import { CarouselCanvas } from "./components/CarouselCanvas";
 import { Inspector } from "./components/Inspector";
+import { CarouselInspector } from "./components/CarouselInspector";
 import { useZine } from "./store";
 import { uid } from "./lib/id";
 import { redo, startHistory, undo } from "./lib/history";
@@ -136,9 +137,9 @@ export default function App() {
     <div className="flex h-full flex-col bg-neutral-900 text-neutral-100">
       <TopBar />
       <div className="flex min-h-0 flex-1">
-        <PageList />
-        {kind === "carousel" ? <CarouselView /> : <SpreadView />}
-        <Inspector />
+        {kind !== "carousel" && <PageList />}
+        {kind === "carousel" ? <CarouselCanvas /> : <SpreadView />}
+        {kind === "carousel" ? <CarouselInspector /> : <Inspector />}
       </div>
     </div>
   );

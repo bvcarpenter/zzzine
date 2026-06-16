@@ -1,16 +1,15 @@
-// Carousel export: render each 4:5 slide to a 1080x1350 PNG and bundle them
-// into a .zip for uploading to Instagram.
+// Carousel export: render the wide artboard once, slice it into 4:5 frames at
+// 1080x1350, and bundle the numbered PNGs into a .zip for Instagram.
 
 import { zipSync } from "fflate";
 import { CAROUSEL_PX, frameSize } from "./dims";
-import { cellRects } from "./layout";
 import { drawImageSlot } from "./render";
 import { loadImage } from "./image";
 import { wrapLines } from "./textlayout";
 import { fontCss, getFont } from "./fonts";
 import type { Asset, Page, TextBlock, Zine } from "../types";
 
-/** Draw a text block onto the frame canvas, mirroring the editor's CSS. */
+/** Draw a text block onto the canvas, mirroring the editor's CSS. */
 function drawText(
   ctx: CanvasRenderingContext2D,
   block: TextBlock,
@@ -61,58 +60,43 @@ function drawText(
   ctx.restore();
 }
 
-async function renderFrame(
-  page: Page,
+/** Render the whole carousel artboard (all slides wide) to one canvas. */
+async function renderArtboard(
+  artboard: Page,
+  slideCount: number,
   assetById: Map<string, Asset>,
   imgCache: Map<string, HTMLImageElement>,
 ): Promise<HTMLCanvasElement> {
-  const { width: W, height: H } = CAROUSEL_PX;
   const frame = frameSize("carousel");
-  const pxPerPt = W / frame.width;
+  const W = CAROUSEL_PX.width * slideCount;
+  const H = CAROUSEL_PX.height;
+  const pxPerPt = CAROUSEL_PX.width / frame.width;
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = page.background;
+  ctx.fillStyle = artboard.background;
   ctx.fillRect(0, 0, W, H);
 
-  const rects = cellRects(
-    page.layout,
-    page.gutter / frame.width,
-    page.gutter / frame.height,
-  );
-  for (let i = 0; i < page.cells.length; i++) {
-    const cell = page.cells[i];
-    const rect = rects[i];
-    if (!cell || !rect) continue;
-    const asset = assetById.get(cell.assetId);
+  for (const item of artboard.items) {
+    const asset = assetById.get(item.assetId);
     if (!asset) continue;
     let el = imgCache.get(asset.id);
     if (!el) {
       el = await loadImage(asset.dataUrl);
       imgCache.set(asset.id, el);
     }
-    const cw = rect.w * W;
-    const ch = rect.h * H;
     ctx.save();
-    ctx.translate(rect.x * W, rect.y * H);
-    if (page.span && i === 0) {
-      ctx.translate(-page.span.index * cw, 0);
-      drawImageSlot(ctx, el, asset.width, asset.height, cell, {
-        width: cw * page.span.count,
-        height: ch,
-      });
-    } else {
-      drawImageSlot(ctx, el, asset.width, asset.height, cell, {
-        width: cw,
-        height: ch,
-      });
-    }
+    ctx.translate(item.x * W, item.y * H);
+    drawImageSlot(ctx, el, asset.width, asset.height, item, {
+      width: item.w * W,
+      height: item.h * H,
+    });
     ctx.restore();
   }
 
-  for (const t of page.texts) drawText(ctx, t, W, H, pxPerPt);
+  for (const t of artboard.texts) drawText(ctx, t, W, H, pxPerPt);
   return canvas;
 }
 
@@ -128,19 +112,30 @@ function canvasToBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   });
 }
 
-/** Render every slide and download a .zip of numbered PNGs. */
+/** Render the artboard, slice it into slides, and download a .zip of PNGs. */
 export async function exportCarouselZip(
   doc: Zine,
   assets: Asset[],
 ): Promise<void> {
+  const artboard = doc.pages[0];
+  if (!artboard) return;
+  const slideCount = Math.max(1, doc.slideCount);
   const assetById = new Map(assets.map((a) => [a.id, a]));
   const imgCache = new Map<string, HTMLImageElement>();
+
+  const wide = await renderArtboard(artboard, slideCount, assetById, imgCache);
+
+  const { width: SW, height: SH } = CAROUSEL_PX;
   const files: Record<string, Uint8Array> = {};
-  for (let i = 0; i < doc.pages.length; i++) {
-    const canvas = await renderFrame(doc.pages[i], assetById, imgCache);
-    files[`${String(i + 1).padStart(2, "0")}.png`] = await canvasToBytes(canvas);
+  for (let k = 0; k < slideCount; k++) {
+    const slide = document.createElement("canvas");
+    slide.width = SW;
+    slide.height = SH;
+    const ctx = slide.getContext("2d")!;
+    ctx.drawImage(wide, k * SW, 0, SW, SH, 0, 0, SW, SH);
+    files[`${String(k + 1).padStart(2, "0")}.png`] = await canvasToBytes(slide);
   }
-  // PNGs are already compressed, so store them without re-deflating.
+
   const zipped = zipSync(files, { level: 0 });
   const blob = new Blob([zipped as BlobPart], { type: "application/zip" });
   const url = URL.createObjectURL(blob);

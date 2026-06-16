@@ -13,40 +13,10 @@ import { useZine } from "../store";
 import { importImageFile } from "../lib/image";
 import { MAX_PAGES, MIN_PAGES, PAGES_PER_SHEET } from "../lib/constants";
 import { LAYOUTS, layoutDef } from "../lib/layout";
-import { frameSize, MAX_SLIDES, MIN_SLIDES, type FrameSize } from "../lib/dims";
-import { wrapLines } from "../lib/textlayout";
-import type {
-  FitMode,
-  LayoutKind,
-  PageNumberPosition,
-  Rotation,
-  TextBlock,
-} from "../types";
+import { frameSize } from "../lib/dims";
+import type { FitMode, LayoutKind, PageNumberPosition, Rotation } from "../types";
 import { FontSelect } from "./FontSelect";
-import { fontCss, getFont } from "../lib/fonts";
-
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-
-/** Estimate a text block's rendered height as a fraction of the frame. */
-function textHeightFraction(block: TextBlock, frame: FrameSize): number {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  const def = getFont(block.fontFamily);
-  const weight = def.supportsStyles && block.bold ? "700 " : "";
-  const style = def.supportsStyles && block.italic ? "italic " : "";
-  let lineCount = 1;
-  if (ctx) {
-    ctx.font = `${style}${weight}${block.fontSize}px ${fontCss(block.fontFamily)}`;
-    const maxWidth = block.width * frame.width;
-    lineCount = Math.max(
-      1,
-      wrapLines(block.text || " ", maxWidth, (t) => ctx.measureText(t).width)
-        .length,
-    );
-  }
-  const heightPt = lineCount * block.fontSize * block.lineHeight;
-  return heightPt / frame.height;
-}
+import { TextControls } from "./TextControls";
 import {
   Button,
   ColorInput,
@@ -78,6 +48,7 @@ function LayoutGlyph({ kind }: { kind: LayoutKind }) {
   );
 }
 
+/** Inspector for zine documents. */
 export function Inspector() {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -89,13 +60,10 @@ export function Inspector() {
   const selectedTextId = useZine((s) => s.selectedTextId);
 
   const setPageCount = useZine((s) => s.setPageCount);
-  const addPage = useZine((s) => s.addPage);
-  const removePage = useZine((s) => s.removePage);
   const setPageBackground = useZine((s) => s.setPageBackground);
   const setPageLayout = useZine((s) => s.setPageLayout);
   const setPageGutter = useZine((s) => s.setPageGutter);
   const toggleSpan = useZine((s) => s.toggleSpan);
-  const setCarouselSpan = useZine((s) => s.setCarouselSpan);
   const addText = useZine((s) => s.addText);
   const addAsset = useZine((s) => s.addAsset);
   const removeAsset = useZine((s) => s.removeAsset);
@@ -110,8 +78,7 @@ export function Inspector() {
 
   if (!page) return <div className="w-[300px] shrink-0" />;
 
-  const isCarousel = doc.kind === "carousel";
-  const frame = frameSize(doc.kind);
+  const frame = frameSize("zine");
   const safeCell = Math.min(cellIndex, page.cells.length - 1);
   const img = page.cells[safeCell] ?? null;
   const selectedText = page.texts.find((t) => t.id === selectedTextId) ?? null;
@@ -119,22 +86,16 @@ export function Inspector() {
   const spanning = !!page.span;
   const multiCell = page.cells.length > 1 && !spanning;
 
-  // Zine: interior pages span their facing spread; covers wrap around.
+  // Interior pages span their facing spread; the covers wrap around.
   const isCover = index === 0 || index === total - 1;
-  const canSpan = !isCarousel && total >= 4;
+  const canSpan = total >= 4;
   const spanLabel = isCover
     ? "Wrap photo across covers"
     : "Span image across spread";
 
-  // Carousel: span a panorama across N consecutive frames from this one.
-  const spanStart = page.span ? index - page.span.index : index;
-  const spanCount = page.span ? page.span.count : 1;
-  const maxSpan = Math.min(6, total - spanStart);
-
   const onPickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     try {
-      // Fill from the selected cell onward when several files are dropped.
       let target = safeCell;
       for (const file of Array.from(files)) {
         const asset = await importImageFile(file);
@@ -167,95 +128,40 @@ export function Inspector() {
         onChange={(e) => onPickFiles(e.target.files)}
       />
 
-      {/* Booklet / Carousel */}
-      {isCarousel ? (
-        <Section title="Carousel">
-          <Field label="Slides">
-            <Button
-              variant="ghost"
-              disabled={total <= MIN_SLIDES}
-              onClick={() => removePage(index)}
-              className="!px-2"
-            >
-              −
-            </Button>
-            <span className="w-8 text-center text-sm font-medium">{total}</span>
-            <Button
-              variant="ghost"
-              disabled={total >= MAX_SLIDES}
-              onClick={addPage}
-              className="!px-2"
-            >
-              +
-            </Button>
-          </Field>
-          <p className="text-xs text-neutral-500">
-            4:5 portrait, exported at 1080×1350. Up to {MAX_SLIDES} slides.
-          </p>
-        </Section>
-      ) : (
-        <Section title="Booklet">
-          <Field label="Pages">
-            <Button
-              variant="ghost"
-              disabled={total <= MIN_PAGES}
-              onClick={() => setPageCount(total - PAGES_PER_SHEET)}
-              className="!px-2"
-            >
-              −4
-            </Button>
-            <span className="w-8 text-center text-sm font-medium">{total}</span>
-            <Button
-              variant="ghost"
-              disabled={total >= MAX_PAGES}
-              onClick={() => setPageCount(total + PAGES_PER_SHEET)}
-              className="!px-2"
-            >
-              +4
-            </Button>
-          </Field>
-          <p className="text-xs text-neutral-500">
-            {total / PAGES_PER_SHEET} folded sheet
-            {total / PAGES_PER_SHEET === 1 ? "" : "s"}. Pages come in multiples
-            of 4.
-          </p>
-        </Section>
-      )}
+      <Section title="Booklet">
+        <Field label="Pages">
+          <Button
+            variant="ghost"
+            disabled={total <= MIN_PAGES}
+            onClick={() => setPageCount(total - PAGES_PER_SHEET)}
+            className="!px-2"
+          >
+            −4
+          </Button>
+          <span className="w-8 text-center text-sm font-medium">{total}</span>
+          <Button
+            variant="ghost"
+            disabled={total >= MAX_PAGES}
+            onClick={() => setPageCount(total + PAGES_PER_SHEET)}
+            className="!px-2"
+          >
+            +4
+          </Button>
+        </Field>
+        <p className="text-xs text-neutral-500">
+          {total / PAGES_PER_SHEET} folded sheet
+          {total / PAGES_PER_SHEET === 1 ? "" : "s"}. Pages come in multiples of
+          4.
+        </p>
+      </Section>
 
-      {/* Page / Slide */}
-      <Section title={isCarousel ? `Slide ${index + 1}` : `Page ${index + 1}`}>
+      <Section title={`Page ${index + 1}`}>
         {canSpan && (
           <Toggle
             label={spanLabel}
             checked={spanning}
             onChange={() => toggleSpan(index)}
           />
-        )}
-        {isCarousel && total > 1 && (
-          <div>
-            <span className="text-xs text-neutral-400">
-              Span photo across frames
-            </span>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {Array.from({ length: maxSpan }, (_, k) => k + 1).map((c) => (
-                <Button
-                  key={c}
-                  variant={spanCount === c ? "primary" : "ghost"}
-                  className="!px-3"
-                  title={c === 1 ? "No span" : `Span ${c} frames`}
-                  onClick={() => setCarouselSpan(spanStart, c)}
-                >
-                  {c}
-                </Button>
-              ))}
-            </div>
-            {spanCount > 1 && (
-              <p className="mt-1 text-xs text-neutral-500">
-                One photo spans slides {spanStart + 1}–{spanStart + spanCount}.
-                Edits apply to all of them.
-              </p>
-            )}
-          </div>
         )}
         {!spanning && (
           <>
@@ -293,7 +199,7 @@ export function Inspector() {
             </Field>
           </>
         )}
-        {spanning && !isCarousel && (
+        {spanning && (
           <p className="text-xs text-neutral-500">
             {isCover
               ? "This photo wraps across the back and front covers. Edits apply to both."
@@ -312,7 +218,6 @@ export function Inspector() {
         </Button>
       </Section>
 
-      {/* Cell selector for multi-image layouts */}
       {multiCell && (
         <Section title="Image cells">
           <div className="grid grid-cols-4 gap-1.5">
@@ -337,16 +242,7 @@ export function Inspector() {
         </Section>
       )}
 
-      {/* Image controls for the selected cell */}
-      <Section
-        title={
-          spanning
-            ? "Image · spans spread"
-            : multiCell
-              ? `Image · cell ${safeCell + 1}`
-              : "Image"
-        }
-      >
+      <Section title={multiCell ? `Image · cell ${safeCell + 1}` : "Image"}>
         <Button onClick={() => fileRef.current?.click()} className="w-full">
           <ImageIcon size={15} />
           {img ? "Replace image" : "Add image"}
@@ -373,18 +269,14 @@ export function Inspector() {
               </Button>
               <Button
                 variant="ghost"
-                onClick={() =>
-                  updateCellImage(index, safeCell, { flipH: !img.flipH })
-                }
+                onClick={() => updateCellImage(index, safeCell, { flipH: !img.flipH })}
                 className="!px-2"
               >
                 <FlipHorizontal size={15} />
               </Button>
               <Button
                 variant="ghost"
-                onClick={() =>
-                  updateCellImage(index, safeCell, { flipV: !img.flipV })
-                }
+                onClick={() => updateCellImage(index, safeCell, { flipV: !img.flipV })}
                 className="!px-2"
               >
                 <FlipVertical size={15} />
@@ -415,9 +307,7 @@ export function Inspector() {
                 variant="ghost"
                 className="flex-1"
                 title="Center the image in its slot"
-                onClick={() =>
-                  updateCellImage(index, safeCell, { offsetX: 0, offsetY: 0 })
-                }
+                onClick={() => updateCellImage(index, safeCell, { offsetX: 0, offsetY: 0 })}
               >
                 Center
               </Button>
@@ -425,11 +315,7 @@ export function Inspector() {
                 variant="ghost"
                 className="flex-1"
                 onClick={() =>
-                  updateCellImage(index, safeCell, {
-                    offsetX: 0,
-                    offsetY: 0,
-                    zoom: 1,
-                  })
+                  updateCellImage(index, safeCell, { offsetX: 0, offsetY: 0, zoom: 1 })
                 }
               >
                 Reset
@@ -445,7 +331,6 @@ export function Inspector() {
         )}
       </Section>
 
-      {/* Selected text */}
       {selectedText && (
         <TextControls
           key={selectedText.id}
@@ -457,7 +342,6 @@ export function Inspector() {
         />
       )}
 
-      {/* Image library */}
       <Section title="Images">
         <Button onClick={() => fileRef.current?.click()} className="w-full">
           <Plus size={15} />
@@ -472,11 +356,7 @@ export function Inspector() {
                   onClick={() => setCellImage(index, safeCell, a.id)}
                   className="block aspect-square w-full overflow-hidden rounded border border-neutral-700 hover:border-violet-500"
                 >
-                  <img
-                    src={a.dataUrl}
-                    alt={a.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={a.dataUrl} alt={a.name} className="h-full w-full object-cover" />
                 </button>
                 <button
                   title="Remove from library"
@@ -491,8 +371,6 @@ export function Inspector() {
         )}
       </Section>
 
-      {/* Page numbers (zine only) */}
-      {!isCarousel && (
       <Section title="Page numbers">
         <Toggle
           label="Show page numbers"
@@ -505,9 +383,7 @@ export function Inspector() {
               <select
                 value={doc.pageNumbers.position}
                 onChange={(e) =>
-                  setPageNumbers({
-                    position: e.target.value as PageNumberPosition,
-                  })
+                  setPageNumbers({ position: e.target.value as PageNumberPosition })
                 }
                 className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm"
               >
@@ -548,159 +424,6 @@ export function Inspector() {
           </>
         )}
       </Section>
-      )}
     </aside>
-  );
-}
-
-function TextControls({
-  block,
-  frame,
-  onChange,
-  onDelete,
-  onFront,
-}: {
-  block: TextBlock;
-  frame: FrameSize;
-  onChange: (p: Partial<TextBlock>) => void;
-  onDelete: () => void;
-  onFront: () => void;
-}) {
-  const def = getFont(block.fontFamily);
-  return (
-    <Section title="Text">
-      <textarea
-        value={block.text}
-        onChange={(e) => onChange({ text: e.target.value })}
-        rows={3}
-        className="w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100"
-        placeholder="Type your text…"
-      />
-      <FontSelect value={block.fontFamily} onChange={(v) => onChange({ fontFamily: v })} />
-      <Field label="Size">
-        <Slider
-          value={block.fontSize}
-          min={6}
-          max={120}
-          onChange={(v) => onChange({ fontSize: v })}
-        />
-        <NumberInput
-          value={block.fontSize}
-          min={6}
-          max={300}
-          onChange={(v) => onChange({ fontSize: v })}
-        />
-      </Field>
-      <Field label="Align">
-        <Segmented
-          value={block.align}
-          onChange={(v) => onChange({ align: v })}
-          options={[
-            { value: "left", label: "L" },
-            { value: "center", label: "C" },
-            { value: "right", label: "R" },
-          ]}
-        />
-      </Field>
-      <Field label="Color">
-        <ColorInput value={block.color} onChange={(v) => onChange({ color: v })} />
-      </Field>
-      {def.supportsStyles && (
-        <Field label="Style">
-          <Button
-            variant={block.bold ? "primary" : "ghost"}
-            onClick={() => onChange({ bold: !block.bold })}
-            className="!px-3 font-bold"
-          >
-            B
-          </Button>
-          <Button
-            variant={block.italic ? "primary" : "ghost"}
-            onClick={() => onChange({ italic: !block.italic })}
-            className="!px-3 italic"
-          >
-            I
-          </Button>
-        </Field>
-      )}
-      <Field label="Highlight">
-        <Toggle
-          label=""
-          checked={block.background !== null}
-          onChange={(v) => onChange({ background: v ? "#ffffff" : null })}
-        />
-        {block.background !== null && (
-          <ColorInput
-            value={block.background}
-            onChange={(v) => onChange({ background: v })}
-          />
-        )}
-      </Field>
-      <Field label="Width">
-        <Slider
-          value={block.width}
-          min={0.1}
-          max={1}
-          step={0.01}
-          onChange={(v) => onChange({ width: v })}
-        />
-      </Field>
-      <div>
-        <span className="text-xs text-neutral-400">Center on page</span>
-        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-          <Button
-            variant="ghost"
-            title="Center horizontally"
-            onClick={() => onChange({ x: clamp01((1 - block.width) / 2) })}
-          >
-            ↔ Across
-          </Button>
-          <Button
-            variant="ghost"
-            title="Center vertically"
-            onClick={() =>
-              onChange({ y: clamp01((1 - textHeightFraction(block, frame)) / 2) })
-            }
-          >
-            ↕ Down
-          </Button>
-          <Button
-            variant="ghost"
-            title="Center both ways"
-            onClick={() =>
-              onChange({
-                x: clamp01((1 - block.width) / 2),
-                y: clamp01((1 - textHeightFraction(block, frame)) / 2),
-              })
-            }
-          >
-            Both
-          </Button>
-        </div>
-      </div>
-      <Field label="Rotation">
-        <Slider
-          value={block.rotation}
-          min={-45}
-          max={45}
-          step={1}
-          onChange={(v) => onChange({ rotation: v })}
-        />
-        <NumberInput
-          value={block.rotation}
-          min={-180}
-          max={180}
-          onChange={(v) => onChange({ rotation: v })}
-        />
-      </Field>
-      <div className="flex gap-2">
-        <Button variant="ghost" className="flex-1" onClick={onFront}>
-          Bring to front
-        </Button>
-        <Button variant="danger" onClick={onDelete}>
-          <Trash2 size={15} />
-        </Button>
-      </div>
-    </Section>
   );
 }

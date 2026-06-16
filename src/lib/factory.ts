@@ -14,6 +14,7 @@ export function createPage(): Page {
     layout: "single",
     cells: [null],
     gutter: 0,
+    items: [],
     texts: [],
   };
 }
@@ -40,12 +41,17 @@ export function createTextBlock(partial: Partial<TextBlock> = {}): TextBlock {
 }
 
 export function createDoc(kind: DocKind = "zine"): Zine {
-  const count = kind === "carousel" ? DEFAULT_SLIDES : DEFAULT_PAGES;
+  // Zine: N pages. Carousel: one wide artboard, cut into `slideCount` slides.
+  const pages =
+    kind === "carousel"
+      ? [createPage()]
+      : Array.from({ length: DEFAULT_PAGES }, () => createPage());
   return {
     version: 1,
     kind,
     title: kind === "carousel" ? "Untitled carousel" : "Untitled zine",
-    pages: Array.from({ length: count }, () => createPage()),
+    pages,
+    slideCount: DEFAULT_SLIDES,
     pageNumbers: {
       enabled: false,
       fontFamily: DEFAULT_FONT_KEY,

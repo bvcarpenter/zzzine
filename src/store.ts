@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   Asset,
   DocKind,
+  ImageItem,
   LayoutKind,
   Page,
   PageImage,
@@ -10,6 +11,7 @@ import type {
   Zine,
 } from "./types";
 import { createDoc, createPage, createTextBlock } from "./lib/factory";
+import { uid } from "./lib/id";
 import { MAX_PAGES, MIN_PAGES } from "./lib/constants";
 import { MAX_SLIDES, MIN_SLIDES } from "./lib/dims";
 import { roundUpToSheet } from "./lib/imposition";
@@ -24,6 +26,8 @@ interface ZineState {
   /** Active image cell within the selected page. */
   selectedCellIndex: number;
   selectedTextId: string | null;
+  /** Selected free-form image item (carousel canvas). */
+  selectedItemId: string | null;
   /** Bumped whenever the document or assets change, to drive autosave. */
   revision: number;
   /** Id of the draft currently being edited (null until loaded). */
@@ -42,6 +46,15 @@ interface ZineState {
   addPage: () => void;
   removePage: (index: number) => void;
   setPageNumbers: (partial: Partial<PageNumberSettings>) => void;
+  /** Carousel: number of 4:5 slides the artboard is sliced into. */
+  setSlideCount: (count: number) => void;
+
+  // --- carousel free-form image items (operate on pages[0]) ---
+  selectItem: (id: string | null) => void;
+  addImageItem: (assetId: string) => void;
+  updateImageItem: (id: string, partial: Partial<ImageItem>) => void;
+  removeImageItem: (id: string) => void;
+  bringItemToFront: (id: string) => void;
 
   // --- selection ---
   selectPage: (index: number) => void;
@@ -89,6 +102,11 @@ function defaultImage(assetId: string): PageImage {
     offsetY: 0,
     zoom: 1,
   };
+}
+
+/** Replace the carousel artboard (pages[0]) with the result of `fn`. */
+function withArtboard(doc: Zine, fn: (p: Page) => Page): Page[] {
+  return doc.pages.map((p, i) => (i === 0 ? fn(p) : p));
 }
 
 /** Replace the page at `index` with the result of `fn`, immutably. */
@@ -147,6 +165,7 @@ export const useZine = create<ZineState>((set) => ({
   selectedPageIndex: 0,
   selectedCellIndex: 0,
   selectedTextId: null,
+  selectedItemId: null,
   revision: 0,
   currentDraftId: null,
 
@@ -157,6 +176,7 @@ export const useZine = create<ZineState>((set) => ({
       selectedPageIndex: 0,
       selectedCellIndex: 0,
       selectedTextId: null,
+      selectedItemId: null,
       revision: 0,
     }),
 
@@ -167,6 +187,7 @@ export const useZine = create<ZineState>((set) => ({
       selectedPageIndex: 0,
       selectedCellIndex: 0,
       selectedTextId: null,
+      selectedItemId: null,
       revision: s.revision + 1,
     })),
 
@@ -179,6 +200,92 @@ export const useZine = create<ZineState>((set) => ({
       selectedPageIndex: Math.min(s.selectedPageIndex, doc.pages.length - 1),
       selectedCellIndex: 0,
       selectedTextId: null,
+      selectedItemId: null,
+      revision: s.revision + 1,
+    })),
+
+  setSlideCount: (count) =>
+    set((s) => {
+      const next = Math.min(MAX_SLIDES, Math.max(2, count));
+      const old = s.doc.slideCount || next;
+      const f = old / next; // keep content on the same slides
+      const pages = withArtboard(s.doc, (p) => ({
+        ...p,
+        items: p.items.map((it) => ({ ...it, x: it.x * f, w: it.w * f })),
+        texts: p.texts.map((t) => ({ ...t, x: t.x * f, width: t.width * f })),
+      }));
+      return {
+        doc: { ...s.doc, slideCount: next, pages },
+        revision: s.revision + 1,
+      };
+    }),
+
+  selectItem: (id) => set({ selectedItemId: id, selectedTextId: null }),
+
+  addImageItem: (assetId) =>
+    set((s) => {
+      const n = s.doc.slideCount || 1;
+      const w = Math.min(1, 1 / n);
+      const count = s.doc.pages[0]?.items.length ?? 0;
+      const x = Math.min(1 - w, count * 0.04);
+      const item: ImageItem = {
+        id: uid("item"),
+        assetId,
+        x: Math.max(0, x),
+        y: 0,
+        w,
+        h: 1,
+        fit: "cover",
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        offsetX: 0,
+        offsetY: 0,
+        zoom: 1,
+      };
+      return {
+        doc: { ...s.doc, pages: withArtboard(s.doc, (p) => ({ ...p, items: [...p.items, item] })) },
+        selectedItemId: item.id,
+        selectedTextId: null,
+        revision: s.revision + 1,
+      };
+    }),
+
+  updateImageItem: (id, partial) =>
+    set((s) => ({
+      doc: {
+        ...s.doc,
+        pages: withArtboard(s.doc, (p) => ({
+          ...p,
+          items: p.items.map((it) => (it.id === id ? { ...it, ...partial } : it)),
+        })),
+      },
+      revision: s.revision + 1,
+    })),
+
+  removeImageItem: (id) =>
+    set((s) => ({
+      doc: {
+        ...s.doc,
+        pages: withArtboard(s.doc, (p) => ({
+          ...p,
+          items: p.items.filter((it) => it.id !== id),
+        })),
+      },
+      selectedItemId: s.selectedItemId === id ? null : s.selectedItemId,
+      revision: s.revision + 1,
+    })),
+
+  bringItemToFront: (id) =>
+    set((s) => ({
+      doc: {
+        ...s.doc,
+        pages: withArtboard(s.doc, (p) => {
+          const target = p.items.find((it) => it.id === id);
+          if (!target) return p;
+          return { ...p, items: [...p.items.filter((it) => it.id !== id), target] };
+        }),
+      },
       revision: s.revision + 1,
     })),
 
@@ -246,6 +353,7 @@ export const useZine = create<ZineState>((set) => ({
       selectedPageIndex: index,
       selectedCellIndex: 0,
       selectedTextId: null,
+      selectedItemId: null,
     }),
 
   selectCell: (cellIndex) => set({ selectedCellIndex: cellIndex }),
@@ -255,12 +363,13 @@ export const useZine = create<ZineState>((set) => ({
       selectedPageIndex: index,
       selectedCellIndex: cellIndex,
       selectedTextId: null,
+      selectedItemId: null,
     }),
 
-  selectText: (id) => set({ selectedTextId: id }),
+  selectText: (id) => set({ selectedTextId: id, selectedItemId: null }),
 
   focusText: (index, id) =>
-    set({ selectedPageIndex: index, selectedTextId: id }),
+    set({ selectedPageIndex: index, selectedTextId: id, selectedItemId: null }),
 
   setPageBackground: (index, color) =>
     set((s) => ({
@@ -409,6 +518,7 @@ export const useZine = create<ZineState>((set) => ({
         pages: s.doc.pages.map((p) => ({
           ...p,
           cells: p.cells.map((c) => (c && c.assetId === assetId ? null : c)),
+          items: p.items.filter((it) => it.assetId !== assetId),
         })),
       },
       revision: s.revision + 1,
@@ -481,6 +591,7 @@ export const useZine = create<ZineState>((set) => ({
           })),
         },
         selectedTextId: block.id,
+        selectedItemId: null,
         revision: s.revision + 1,
       };
     }),
