@@ -91,6 +91,8 @@ export interface ImageItem {
   offsetX: number;
   offsetY: number;
   zoom: number;
+  /** Locked display aspect ratio (width/height in px); undefined = free. */
+  aspect?: number;
 }
 
 /** One page of the zine (one half-letter face) or a carousel artboard. */

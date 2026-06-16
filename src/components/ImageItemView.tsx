@@ -60,10 +60,17 @@ export function ImageItemView({ item, asset, canvasW, canvasH, selected }: Props
   const onResizeMove = (e: React.PointerEvent) => {
     const r = resize.current;
     if (!r) return;
-    updateImageItem(item.id, {
-      w: clamp(r.bw + (e.clientX - r.sx) / canvasW, 0.03, 4),
-      h: clamp(r.bh + (e.clientY - r.sy) / canvasH, 0.03, 1.5),
-    });
+    const w = clamp(r.bw + (e.clientX - r.sx) / canvasW, 0.03, 4);
+    if (item.aspect) {
+      // Keep the locked display ratio: height follows width.
+      const h = clamp((w * (canvasW / canvasH)) / item.aspect, 0.03, 3);
+      updateImageItem(item.id, { w, h });
+    } else {
+      updateImageItem(item.id, {
+        w,
+        h: clamp(r.bh + (e.clientY - r.sy) / canvasH, 0.03, 1.5),
+      });
+    }
   };
   const onResizeEnd = (e: React.PointerEvent) => {
     resize.current = null;

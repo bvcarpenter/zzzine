@@ -24,6 +24,17 @@ import {
   Slider,
 } from "./ui";
 
+const ASPECTS: { label: string; value: number | null }[] = [
+  { label: "Free", value: null },
+  { label: "1:1", value: 1 },
+  { label: "4:5", value: 4 / 5 },
+  { label: "5:4", value: 5 / 4 },
+  { label: "3:2", value: 3 / 2 },
+  { label: "2:3", value: 2 / 3 },
+  { label: "16:9", value: 16 / 9 },
+  { label: "9:16", value: 9 / 16 },
+];
+
 export function CarouselInspector() {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -35,6 +46,7 @@ export function CarouselInspector() {
   const selectedTextId = useZine((s) => s.selectedTextId);
 
   const setSlideCount = useZine((s) => s.setSlideCount);
+  const setItemAspect = useZine((s) => s.setItemAspect);
   const setPageBackground = useZine((s) => s.setPageBackground);
   const addImageItem = useZine((s) => s.addImageItem);
   const updateImageItem = useZine((s) => s.updateImageItem);
@@ -179,6 +191,61 @@ export function CarouselInspector() {
               }
             />
           </Field>
+          <div>
+            <span className="text-xs text-neutral-400">Aspect ratio</span>
+            <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+              {ASPECTS.map((a) => {
+                const active =
+                  a.value === null
+                    ? item.aspect === undefined
+                    : item.aspect !== undefined &&
+                      Math.abs(item.aspect - a.value) < 0.01;
+                return (
+                  <Button
+                    key={a.label}
+                    variant={active ? "primary" : "ghost"}
+                    className="!px-2"
+                    onClick={() => setItemAspect(item.id, a.value)}
+                  >
+                    {a.label}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <span className="text-xs text-neutral-400">Fit to slides</span>
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+              <Button
+                variant="ghost"
+                title="Span the photo across every slide"
+                onClick={() =>
+                  updateImageItem(item.id, {
+                    x: 0,
+                    y: 0,
+                    w: 1,
+                    h: 1,
+                    aspect: undefined,
+                  })
+                }
+              >
+                Span all slides
+              </Button>
+              <Button
+                variant="ghost"
+                title="Shrink the photo to one slide"
+                onClick={() =>
+                  updateImageItem(item.id, {
+                    w: 1 / slideCount,
+                    h: 1,
+                    aspect: undefined,
+                  })
+                }
+              >
+                One slide
+              </Button>
+            </div>
+          </div>
           <div className="flex gap-2">
             <Button
               variant="ghost"

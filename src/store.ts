@@ -13,7 +13,7 @@ import type {
 import { createDoc, createPage, createTextBlock } from "./lib/factory";
 import { uid } from "./lib/id";
 import { MAX_PAGES, MIN_PAGES } from "./lib/constants";
-import { MAX_SLIDES, MIN_SLIDES } from "./lib/dims";
+import { CAROUSEL_FRAME, MAX_SLIDES, MIN_SLIDES } from "./lib/dims";
 import { roundUpToSheet } from "./lib/imposition";
 import { cellCount } from "./lib/layout";
 import { buildSpreads } from "./lib/spreads";
@@ -55,6 +55,8 @@ interface ZineState {
   updateImageItem: (id: string, partial: Partial<ImageItem>) => void;
   removeImageItem: (id: string) => void;
   bringItemToFront: (id: string) => void;
+  /** Lock an item to a display aspect ratio (w/h), or null to free it. */
+  setItemAspect: (id: string, aspect: number | null) => void;
 
   // --- selection ---
   selectPage: (index: number) => void;
@@ -225,9 +227,17 @@ export const useZine = create<ZineState>((set) => ({
   addImageItem: (assetId) =>
     set((s) => {
       const n = s.doc.slideCount || 1;
-      const w = Math.min(1, 1 / n);
+      const slideAspect = CAROUSEL_FRAME.width / CAROUSEL_FRAME.height;
+      // Auto-size from the image: a wide photo spans the slides it naturally
+      // covers at full canvas height; a single slide otherwise.
+      const asset = s.assets.find((a) => a.id === assetId);
+      let w = 1 / n;
+      if (asset && asset.height > 0) {
+        const imgAspect = asset.width / asset.height;
+        w = Math.min(1, Math.max(1 / n, imgAspect / slideAspect / n));
+      }
       const count = s.doc.pages[0]?.items.length ?? 0;
-      const x = Math.min(1 - w, count * 0.04);
+      const x = w >= 1 ? 0 : Math.min(1 - w, count * 0.04);
       const item: ImageItem = {
         id: uid("item"),
         assetId,
@@ -288,6 +298,36 @@ export const useZine = create<ZineState>((set) => ({
       },
       revision: s.revision + 1,
     })),
+
+  setItemAspect: (id, aspect) =>
+    set((s) => {
+      // canvasW/canvasH ratio = slideCount * (slide width / slide height).
+      const ratio =
+        (s.doc.slideCount || 1) *
+        (CAROUSEL_FRAME.width / CAROUSEL_FRAME.height);
+      const pages = withArtboard(s.doc, (p) => ({
+        ...p,
+        items: p.items.map((it) => {
+          if (it.id !== id) return it;
+          if (!aspect) return { ...it, aspect: undefined };
+          // Keep width; derive height for the target aspect. If that would
+          // overflow the canvas height, keep full height and shrink width.
+          let w = it.w;
+          let h = (w * ratio) / aspect;
+          if (h > 1) {
+            h = 1;
+            w = aspect / ratio;
+          }
+          return {
+            ...it,
+            aspect,
+            w: Math.min(1, Math.max(0.03, w)),
+            h: Math.min(1.5, Math.max(0.03, h)),
+          };
+        }),
+      }));
+      return { doc: { ...s.doc, pages }, revision: s.revision + 1 };
+    }),
 
   setTitle: (title) =>
     set((s) => ({ doc: { ...s.doc, title }, revision: s.revision + 1 })),
