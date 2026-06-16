@@ -21,6 +21,7 @@ import {
   SHEET_WIDTH_PT,
 } from "./constants";
 import { imposeBooklet } from "./imposition";
+import { cellRects } from "./layout";
 import { FONTS, getFont } from "./fonts";
 import { wrapLines } from "./textlayout";
 import { drawImageSlot } from "./render";
@@ -126,22 +127,22 @@ async function buildFontResolver(
   };
 }
 
-/** Composite a page's image (if any) to a JPEG data URL at export DPI. */
+/** Composite a page's image cells (if any) to a JPEG data URL at export DPI. */
 async function renderPageImage(
   page: Page,
   assetById: Map<string, Asset>,
   imgCache: Map<string, HTMLImageElement>,
   dpi: number,
 ): Promise<string | null> {
-  if (!page.image) return null;
-  const asset = assetById.get(page.image.assetId);
-  if (!asset) return null;
-
-  let el = imgCache.get(asset.id);
-  if (!el) {
-    el = await loadImage(asset.dataUrl);
-    imgCache.set(asset.id, el);
-  }
+  const rects = cellRects(
+    page.layout,
+    page.gutter / PAGE_WIDTH_PT,
+    page.gutter / PAGE_HEIGHT_PT,
+  );
+  const filled = page.cells
+    .map((cell, i) => ({ cell, rect: rects[i], i }))
+    .filter((x) => x.cell && x.rect);
+  if (filled.length === 0) return null;
 
   const scale = dpi / PT_PER_INCH;
   const w = Math.round(PAGE_WIDTH_PT * scale);
@@ -150,13 +151,38 @@ async function renderPageImage(
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d")!;
-  // Bake the page background so the composited JPEG fills any letterboxing.
+  // Bake the page background so the composited JPEG fills gutters/letterboxing.
   ctx.fillStyle = page.background;
   ctx.fillRect(0, 0, w, h);
-  drawImageSlot(ctx, el, asset.width, asset.height, page.image, {
-    width: w,
-    height: h,
-  });
+
+  for (const { cell, rect, i } of filled) {
+    const asset = assetById.get(cell!.assetId);
+    if (!asset) continue;
+    let el = imgCache.get(asset.id);
+    if (!el) {
+      el = await loadImage(asset.dataUrl);
+      imgCache.set(asset.id, el);
+    }
+    const cw = rect.w * w;
+    const ch = rect.h * h;
+    ctx.save();
+    ctx.translate(rect.x * w, rect.y * h);
+    if (page.span && i === 0) {
+      // One slice of a spanning image: fit to a slot `count` frames wide.
+      ctx.translate(-page.span.index * cw, 0);
+      drawImageSlot(ctx, el, asset.width, asset.height, cell!, {
+        width: cw * page.span.count,
+        height: ch,
+      });
+    } else {
+      drawImageSlot(ctx, el, asset.width, asset.height, cell!, {
+        width: cw,
+        height: ch,
+      });
+    }
+    ctx.restore();
+  }
+
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 

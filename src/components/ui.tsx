@@ -24,11 +24,13 @@ export function Field({
   label: string;
   children: ReactNode;
 }) {
+  // A <div> rather than a <label>: these rows often contain multiple buttons,
+  // and a <label> wrapping buttons causes clicks to misfire/delegate.
   return (
-    <label className="flex items-center justify-between gap-3 text-sm text-neutral-300">
+    <div className="flex items-center justify-between gap-3 text-sm text-neutral-300">
       <span className="shrink-0 text-neutral-400">{label}</span>
       <span className="flex min-w-0 items-center gap-2">{children}</span>
-    </label>
+    </div>
   );
 }
 
@@ -111,12 +113,14 @@ export function Toggle({
   label: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-neutral-300">
-      <span className="text-neutral-400">{label}</span>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={`relative h-5 w-9 rounded-full transition ${
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex cursor-pointer items-center justify-between gap-3 text-sm text-neutral-300"
+    >
+      {label && <span className="text-neutral-400">{label}</span>}
+      <span
+        className={`relative h-5 w-9 shrink-0 rounded-full transition ${
           checked ? "bg-violet-600" : "bg-neutral-700"
         }`}
       >
@@ -125,8 +129,8 @@ export function Toggle({
             checked ? "left-[18px]" : "left-0.5"
           }`}
         />
-      </button>
-    </label>
+      </span>
+    </button>
   );
 }
 
@@ -165,12 +169,14 @@ export function Button({
   variant = "default",
   disabled,
   className = "",
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
   variant?: "default" | "primary" | "ghost" | "danger";
   disabled?: boolean;
   className?: string;
+  title?: string;
 }) {
   const styles: Record<string, string> = {
     default:
@@ -183,7 +189,8 @@ export function Button({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${styles[variant]} ${className}`}
+      title={title}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${styles[variant]} ${className}`}
     >
       {children}
     </button>

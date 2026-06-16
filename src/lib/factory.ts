@@ -3,13 +3,18 @@
 import { DEFAULT_PAGES } from "./constants";
 import { DEFAULT_FONT_KEY } from "./fonts";
 import { uid } from "./id";
-import type { Page, TextBlock, Zine } from "../types";
+import type { DocKind, Page, TextBlock, Zine } from "../types";
+
+const DEFAULT_SLIDES = 3;
 
 export function createPage(): Page {
   return {
     id: uid("page"),
     background: "#ffffff",
-    image: null,
+    layout: "single",
+    cells: [null],
+    gutter: 0,
+    items: [],
     texts: [],
   };
 }
@@ -35,11 +40,18 @@ export function createTextBlock(partial: Partial<TextBlock> = {}): TextBlock {
   };
 }
 
-export function createZine(pageCount: number = DEFAULT_PAGES): Zine {
+export function createDoc(kind: DocKind = "zine"): Zine {
+  // Zine: N pages. Carousel: one wide artboard, cut into `slideCount` slides.
+  const pages =
+    kind === "carousel"
+      ? [createPage()]
+      : Array.from({ length: DEFAULT_PAGES }, () => createPage());
   return {
     version: 1,
-    title: "Untitled zine",
-    pages: Array.from({ length: pageCount }, () => createPage()),
+    kind,
+    title: kind === "carousel" ? "Untitled carousel" : "Untitled zine",
+    pages,
+    slideCount: DEFAULT_SLIDES,
     pageNumbers: {
       enabled: false,
       fontFamily: DEFAULT_FONT_KEY,
@@ -50,4 +62,9 @@ export function createZine(pageCount: number = DEFAULT_PAGES): Zine {
       startAt: 1,
     },
   };
+}
+
+/** Back-compat alias used in a few places. */
+export function createZine(): Zine {
+  return createDoc("zine");
 }

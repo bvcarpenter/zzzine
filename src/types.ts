@@ -28,6 +28,17 @@ export interface PageImage {
 export type TextAlign = "left" | "center" | "right";
 export type VerticalAnchor = "top" | "middle" | "bottom";
 
+/** A document is either a folded-booklet zine or an Instagram carousel. */
+export type DocKind = "zine" | "carousel";
+
+/** One frame's slice of an image spanning several frames. */
+export interface SpanSlice {
+  /** Total number of frames the image spans. */
+  count: number;
+  /** This frame's position within the span (0-based). */
+  index: number;
+}
+
 /** A text block (caption, title, or text-over-image) placed on a page. */
 export interface TextBlock {
   id: string;
@@ -53,12 +64,56 @@ export interface TextBlock {
   rotation: number;
 }
 
-/** One page of the zine (one half-letter face). */
+/** Image grid layouts for a page. */
+export type LayoutKind =
+  | "single" // 1
+  | "two-h" // 2 side by side
+  | "two-v" // 2 stacked
+  | "three-h" // 3 in a row
+  | "three-v" // 3 stacked
+  | "four"; // 2x2 grid
+
+/** A free-form image placed on the carousel canvas (box + transforms). */
+export interface ImageItem {
+  id: string;
+  assetId: string;
+  /** Box on the canvas as fractions of the whole canvas (0..1). */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** How the image fills its box. */
+  fit: FitMode;
+  rotation: Rotation;
+  flipH: boolean;
+  flipV: boolean;
+  /** Pan within the box and zoom on top of fit. */
+  offsetX: number;
+  offsetY: number;
+  zoom: number;
+  /** Locked display aspect ratio (width/height in px); undefined = free. */
+  aspect?: number;
+}
+
+/** One page of the zine (one half-letter face) or a carousel artboard. */
 export interface Page {
   id: string;
   /** Solid background color of the page. */
   background: string;
-  image: PageImage | null;
+  /** Image grid layout (zine). */
+  layout: LayoutKind;
+  /** One image slot per layout cell, in row-major order; null = empty (zine). */
+  cells: (PageImage | null)[];
+  /** Gap between and around cells, in points (zine). */
+  gutter: number;
+  /** Free-form image items (carousel canvas), bottom-to-top. */
+  items: ImageItem[];
+  /**
+   * When set, this page shows one slice of an image spanning several frames
+   * (a zine spread/cover pair = 2; a carousel panorama = N). The frames in the
+   * group share the same cells[0] image. Forces a single-cell layout.
+   */
+  span?: SpanSlice;
   texts: TextBlock[];
 }
 
@@ -84,8 +139,13 @@ export interface PageNumberSettings {
 export interface Zine {
   /** Schema version, for migrating saved projects. */
   version: 1;
+  /** Whether this is a folded-booklet zine or an Instagram carousel. */
+  kind: DocKind;
   title: string;
+  /** Zine: the pages. Carousel: a single wide artboard at pages[0]. */
   pages: Page[];
+  /** Carousel: number of 4:5 slides the artboard is cut into on export. */
+  slideCount: number;
   pageNumbers: PageNumberSettings;
 }
 

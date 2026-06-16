@@ -12,9 +12,11 @@ import {
 import { useZine } from "../store";
 import { importImageFile } from "../lib/image";
 import { MAX_PAGES, MIN_PAGES, PAGES_PER_SHEET } from "../lib/constants";
-import type { FitMode, PageNumberPosition, Rotation } from "../types";
+import { LAYOUTS, layoutDef } from "../lib/layout";
+import { frameSize } from "../lib/dims";
+import type { FitMode, LayoutKind, PageNumberPosition, Rotation } from "../types";
 import { FontSelect } from "./FontSelect";
-import { getFont } from "../lib/fonts";
+import { TextControls } from "./TextControls";
 import {
   Button,
   ColorInput,
@@ -26,6 +28,27 @@ import {
   Toggle,
 } from "./ui";
 
+/** Tiny grid glyph illustrating a layout. */
+function LayoutGlyph({ kind }: { kind: LayoutKind }) {
+  const { rows, cols } = layoutDef(kind);
+  return (
+    <div
+      className="grid gap-[1px]"
+      style={{
+        width: 16,
+        height: 20,
+        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+        gridTemplateRows: `repeat(${rows}, 1fr)`,
+      }}
+    >
+      {Array.from({ length: rows * cols }).map((_, i) => (
+        <div key={i} className="bg-current" />
+      ))}
+    </div>
+  );
+}
+
+/** Inspector for zine documents. */
 export function Inspector() {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -33,16 +56,21 @@ export function Inspector() {
   const index = useZine((s) => s.selectedPageIndex);
   const page = useZine((s) => s.doc.pages[s.selectedPageIndex]);
   const assets = useZine((s) => s.assets);
+  const cellIndex = useZine((s) => s.selectedCellIndex);
   const selectedTextId = useZine((s) => s.selectedTextId);
 
   const setPageCount = useZine((s) => s.setPageCount);
   const setPageBackground = useZine((s) => s.setPageBackground);
+  const setPageLayout = useZine((s) => s.setPageLayout);
+  const setPageGutter = useZine((s) => s.setPageGutter);
+  const toggleSpan = useZine((s) => s.toggleSpan);
   const addText = useZine((s) => s.addText);
   const addAsset = useZine((s) => s.addAsset);
   const removeAsset = useZine((s) => s.removeAsset);
-  const setPageImage = useZine((s) => s.setPageImage);
-  const updatePageImage = useZine((s) => s.updatePageImage);
-  const clearPageImage = useZine((s) => s.clearPageImage);
+  const setCellImage = useZine((s) => s.setCellImage);
+  const updateCellImage = useZine((s) => s.updateCellImage);
+  const clearCell = useZine((s) => s.clearCell);
+  const selectCell = useZine((s) => s.selectCell);
   const updateText = useZine((s) => s.updateText);
   const removeText = useZine((s) => s.removeText);
   const bringTextToFront = useZine((s) => s.bringTextToFront);
@@ -50,16 +78,33 @@ export function Inspector() {
 
   if (!page) return <div className="w-[300px] shrink-0" />;
 
+  const frame = frameSize("zine");
+  const safeCell = Math.min(cellIndex, page.cells.length - 1);
+  const img = page.cells[safeCell] ?? null;
   const selectedText = page.texts.find((t) => t.id === selectedTextId) ?? null;
-  const img = page.image;
+  const total = doc.pages.length;
+  const spanning = !!page.span;
+  const multiCell = page.cells.length > 1 && !spanning;
+
+  // Interior pages span their facing spread; the covers wrap around.
+  const isCover = index === 0 || index === total - 1;
+  const canSpan = total >= 4;
+  const spanLabel = isCover
+    ? "Wrap photo across covers"
+    : "Span image across spread";
 
   const onPickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const file = files[0];
     try {
-      const asset = await importImageFile(file);
-      addAsset(asset);
-      setPageImage(index, asset.id);
+      let target = safeCell;
+      for (const file of Array.from(files)) {
+        const asset = await importImageFile(file);
+        addAsset(asset);
+        if (target < page.cells.length) {
+          setCellImage(index, target, asset.id);
+          target += 1;
+        }
+      }
     } catch {
       alert("Sorry, that image could not be loaded.");
     }
@@ -69,10 +114,8 @@ export function Inspector() {
   const rotateBy = (delta: number) => {
     if (!img) return;
     const r = (((img.rotation + delta) % 360) + 360) % 360;
-    updatePageImage(index, { rotation: r as Rotation });
+    updateCellImage(index, safeCell, { rotation: r as Rotation });
   };
-
-  const total = doc.pages.length;
 
   return (
     <aside className="flex w-[300px] shrink-0 flex-col overflow-y-auto border-l border-neutral-800 bg-neutral-950 text-neutral-200">
@@ -80,11 +123,11 @@ export function Inspector() {
         ref={fileRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={(e) => onPickFiles(e.target.files)}
       />
 
-      {/* Booklet */}
       <Section title="Booklet">
         <Field label="Pages">
           <Button
@@ -112,131 +155,213 @@ export function Inspector() {
         </p>
       </Section>
 
-      {/* Page */}
       <Section title={`Page ${index + 1}`}>
+        {canSpan && (
+          <Toggle
+            label={spanLabel}
+            checked={spanning}
+            onChange={() => toggleSpan(index)}
+          />
+        )}
+        {!spanning && (
+          <>
+            <span className="text-xs text-neutral-400">Layout</span>
+            <div className="grid grid-cols-6 gap-1.5">
+              {LAYOUTS.map((l) => (
+                <button
+                  key={l.kind}
+                  title={l.label}
+                  onClick={() => setPageLayout(index, l.kind)}
+                  className={`flex items-center justify-center rounded border py-1.5 ${
+                    page.layout === l.kind
+                      ? "border-violet-500 bg-violet-600/20 text-violet-300"
+                      : "border-neutral-700 text-neutral-400 hover:border-neutral-500"
+                  }`}
+                >
+                  <LayoutGlyph kind={l.kind} />
+                </button>
+              ))}
+            </div>
+            <Field label="Gap">
+              <Slider
+                value={page.gutter}
+                min={0}
+                max={48}
+                onChange={(v) => setPageGutter(index, v)}
+              />
+              <NumberInput
+                value={page.gutter}
+                min={0}
+                max={96}
+                step={1}
+                onChange={(v) => setPageGutter(index, v)}
+              />
+            </Field>
+          </>
+        )}
+        {spanning && (
+          <p className="text-xs text-neutral-500">
+            {isCover
+              ? "This photo wraps across the back and front covers. Edits apply to both."
+              : "This image spans both facing pages. Edits apply to the whole spread."}
+          </p>
+        )}
         <Field label="Background">
           <ColorInput
             value={page.background}
             onChange={(v) => setPageBackground(index, v)}
           />
         </Field>
-        <div className="flex gap-2">
-          <Button onClick={() => fileRef.current?.click()} className="flex-1">
-            <ImageIcon size={15} />
-            {img ? "Replace" : "Add image"}
-          </Button>
-          <Button onClick={() => addText(index)} className="flex-1">
-            <Type size={15} />
-            Add text
-          </Button>
-        </div>
+        <Button onClick={() => addText(index)} className="w-full">
+          <Type size={15} />
+          Add text
+        </Button>
       </Section>
 
-      {/* Image controls */}
-      {img && (
-        <Section title="Image">
-          <Field label="Fit">
-            <Segmented<FitMode>
-              value={img.fit}
-              onChange={(v) => updatePageImage(index, { fit: v })}
-              options={[
-                { value: "cover", label: "Fill slot", title: "Cover & crop" },
-                { value: "contain", label: "Fit", title: "Fit inside" },
-                { value: "fill", label: "Stretch", title: "Stretch" },
-              ]}
-            />
-          </Field>
-          <Field label="Rotate">
-            <Button variant="ghost" onClick={() => rotateBy(-90)} className="!px-2">
-              <RotateCcw size={15} />
-            </Button>
-            <Button variant="ghost" onClick={() => rotateBy(90)} className="!px-2">
-              <RotateCw size={15} />
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() =>
-                updatePageImage(index, { flipH: !img.flipH })
-              }
-              className="!px-2"
-            >
-              <FlipHorizontal size={15} />
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() =>
-                updatePageImage(index, { flipV: !img.flipV })
-              }
-              className="!px-2"
-            >
-              <FlipVertical size={15} />
-            </Button>
-          </Field>
-          <Field label="Zoom">
-            <Slider
-              value={img.zoom}
-              min={0.2}
-              max={4}
-              step={0.02}
-              onChange={(v) => updatePageImage(index, { zoom: v })}
-            />
-          </Field>
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              className="flex-1"
-              onClick={() =>
-                updatePageImage(index, { offsetX: 0, offsetY: 0, zoom: 1 })
-              }
-            >
-              Reset position
-            </Button>
-            <Button variant="danger" onClick={() => clearPageImage(index)}>
-              <Trash2 size={15} />
-            </Button>
+      {multiCell && (
+        <Section title="Image cells">
+          <div className="grid grid-cols-4 gap-1.5">
+            {page.cells.map((c, i) => (
+              <button
+                key={i}
+                onClick={() => selectCell(i)}
+                className={`rounded border py-1.5 text-xs ${
+                  i === safeCell
+                    ? "border-violet-500 bg-violet-600/20 text-violet-200"
+                    : "border-neutral-700 text-neutral-400 hover:border-neutral-500"
+                }`}
+              >
+                {i + 1}
+                {c ? " •" : ""}
+              </button>
+            ))}
           </div>
           <p className="text-xs text-neutral-500">
-            Drag the image on the page to reposition; scroll to zoom.
+            Pick a cell (or click it on the page), then add or adjust its image.
           </p>
         </Section>
       )}
 
-      {/* Text controls */}
+      <Section title={multiCell ? `Image · cell ${safeCell + 1}` : "Image"}>
+        <Button onClick={() => fileRef.current?.click()} className="w-full">
+          <ImageIcon size={15} />
+          {img ? "Replace image" : "Add image"}
+        </Button>
+        {img && (
+          <>
+            <Field label="Fit">
+              <Segmented<FitMode>
+                value={img.fit}
+                onChange={(v) => updateCellImage(index, safeCell, { fit: v })}
+                options={[
+                  { value: "cover", label: "Fill", title: "Cover & crop" },
+                  { value: "contain", label: "Fit", title: "Fit inside" },
+                  { value: "fill", label: "Stretch", title: "Stretch" },
+                ]}
+              />
+            </Field>
+            <Field label="Rotate">
+              <Button variant="ghost" onClick={() => rotateBy(-90)} className="!px-2">
+                <RotateCcw size={15} />
+              </Button>
+              <Button variant="ghost" onClick={() => rotateBy(90)} className="!px-2">
+                <RotateCw size={15} />
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => updateCellImage(index, safeCell, { flipH: !img.flipH })}
+                className="!px-2"
+              >
+                <FlipHorizontal size={15} />
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => updateCellImage(index, safeCell, { flipV: !img.flipV })}
+                className="!px-2"
+              >
+                <FlipVertical size={15} />
+              </Button>
+            </Field>
+            <Field label="Zoom">
+              <Slider
+                value={img.zoom}
+                min={0.2}
+                max={4}
+                step={0.01}
+                onChange={(v) => updateCellImage(index, safeCell, { zoom: v })}
+              />
+              <NumberInput
+                value={Math.round(img.zoom * 100) / 100}
+                min={0.1}
+                max={6}
+                step={0.05}
+                onChange={(v) =>
+                  updateCellImage(index, safeCell, {
+                    zoom: Math.round(v * 100) / 100,
+                  })
+                }
+              />
+            </Field>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                className="flex-1"
+                title="Center the image in its slot"
+                onClick={() => updateCellImage(index, safeCell, { offsetX: 0, offsetY: 0 })}
+              >
+                Center
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={() =>
+                  updateCellImage(index, safeCell, { offsetX: 0, offsetY: 0, zoom: 1 })
+                }
+              >
+                Reset
+              </Button>
+              <Button variant="danger" onClick={() => clearCell(index, safeCell)}>
+                <Trash2 size={15} />
+              </Button>
+            </div>
+            <p className="text-xs text-neutral-500">
+              Drag the image on the page to reposition; scroll to zoom.
+            </p>
+          </>
+        )}
+      </Section>
+
       {selectedText && (
         <TextControls
           key={selectedText.id}
           block={selectedText}
+          frame={frame}
           onChange={(p) => updateText(index, selectedText.id, p)}
           onDelete={() => removeText(index, selectedText.id)}
           onFront={() => bringTextToFront(index, selectedText.id)}
         />
       )}
 
-      {/* Image library */}
       <Section title="Images">
         <Button onClick={() => fileRef.current?.click()} className="w-full">
           <Plus size={15} />
-          Upload image
+          Upload image(s)
         </Button>
         {assets.length > 0 && (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="columns-3 gap-2">
             {assets.map((a) => (
-              <div key={a.id} className="group relative">
+              <div key={a.id} className="group relative mb-2 break-inside-avoid">
                 <button
-                  title={`Place "${a.name}" on this page`}
-                  onClick={() => setPageImage(index, a.id)}
-                  className="block aspect-square w-full overflow-hidden rounded border border-neutral-700 hover:border-violet-500"
+                  title={`Place "${a.name}" in cell ${safeCell + 1}`}
+                  onClick={() => setCellImage(index, safeCell, a.id)}
+                  className="block w-full overflow-hidden rounded border border-neutral-700 hover:border-violet-500"
                 >
-                  <img
-                    src={a.dataUrl}
-                    alt={a.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={a.dataUrl} alt={a.name} className="block h-auto w-full" />
                 </button>
                 <button
                   title="Remove from library"
                   onClick={() => removeAsset(a.id)}
-                  className="absolute right-1 top-1 rounded bg-black/70 p-0.5 text-white opacity-0 transition group-hover:opacity-100"
+                  className="absolute right-1 top-1 rounded bg-black/70 p-1 text-white opacity-0 transition group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                 >
                   <Trash2 size={12} />
                 </button>
@@ -246,7 +371,6 @@ export function Inspector() {
         )}
       </Section>
 
-      {/* Page numbers */}
       <Section title="Page numbers">
         <Toggle
           label="Show page numbers"
@@ -259,9 +383,7 @@ export function Inspector() {
               <select
                 value={doc.pageNumbers.position}
                 onChange={(e) =>
-                  setPageNumbers({
-                    position: e.target.value as PageNumberPosition,
-                  })
+                  setPageNumbers({ position: e.target.value as PageNumberPosition })
                 }
                 className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm"
               >
@@ -303,122 +425,5 @@ export function Inspector() {
         )}
       </Section>
     </aside>
-  );
-}
-
-function TextControls({
-  block,
-  onChange,
-  onDelete,
-  onFront,
-}: {
-  block: import("../types").TextBlock;
-  onChange: (p: Partial<import("../types").TextBlock>) => void;
-  onDelete: () => void;
-  onFront: () => void;
-}) {
-  const def = getFont(block.fontFamily);
-  return (
-    <Section title="Text">
-      <textarea
-        value={block.text}
-        onChange={(e) => onChange({ text: e.target.value })}
-        rows={3}
-        className="w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100"
-        placeholder="Type your text…"
-      />
-      <FontSelect value={block.fontFamily} onChange={(v) => onChange({ fontFamily: v })} />
-      <Field label="Size">
-        <Slider
-          value={block.fontSize}
-          min={6}
-          max={120}
-          onChange={(v) => onChange({ fontSize: v })}
-        />
-        <NumberInput
-          value={block.fontSize}
-          min={6}
-          max={300}
-          onChange={(v) => onChange({ fontSize: v })}
-        />
-      </Field>
-      <Field label="Align">
-        <Segmented
-          value={block.align}
-          onChange={(v) => onChange({ align: v })}
-          options={[
-            { value: "left", label: "L" },
-            { value: "center", label: "C" },
-            { value: "right", label: "R" },
-          ]}
-        />
-      </Field>
-      <Field label="Color">
-        <ColorInput value={block.color} onChange={(v) => onChange({ color: v })} />
-      </Field>
-      {def.supportsStyles && (
-        <Field label="Style">
-          <Button
-            variant={block.bold ? "primary" : "ghost"}
-            onClick={() => onChange({ bold: !block.bold })}
-            className="!px-3 font-bold"
-          >
-            B
-          </Button>
-          <Button
-            variant={block.italic ? "primary" : "ghost"}
-            onClick={() => onChange({ italic: !block.italic })}
-            className="!px-3 italic"
-          >
-            I
-          </Button>
-        </Field>
-      )}
-      <Field label="Highlight">
-        <Toggle
-          label=""
-          checked={block.background !== null}
-          onChange={(v) => onChange({ background: v ? "#ffffff" : null })}
-        />
-        {block.background !== null && (
-          <ColorInput
-            value={block.background}
-            onChange={(v) => onChange({ background: v })}
-          />
-        )}
-      </Field>
-      <Field label="Width">
-        <Slider
-          value={block.width}
-          min={0.1}
-          max={1}
-          step={0.01}
-          onChange={(v) => onChange({ width: v })}
-        />
-      </Field>
-      <Field label="Rotation">
-        <Slider
-          value={block.rotation}
-          min={-45}
-          max={45}
-          step={1}
-          onChange={(v) => onChange({ rotation: v })}
-        />
-        <NumberInput
-          value={block.rotation}
-          min={-180}
-          max={180}
-          onChange={(v) => onChange({ rotation: v })}
-        />
-      </Field>
-      <div className="flex gap-2">
-        <Button variant="ghost" className="flex-1" onClick={onFront}>
-          Bring to front
-        </Button>
-        <Button variant="danger" onClick={onDelete}>
-          <Trash2 size={15} />
-        </Button>
-      </div>
-    </Section>
   );
 }

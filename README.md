@@ -1,21 +1,40 @@
 # zzzine
 
-Make printable **zines** in your browser. Lay images and text onto half-letter
-pages, then export a **print-ready PDF** that's already imposed for double-sided
-printing — print, fold in half, staple, done.
+Make printable **zines** and **Instagram carousels** in your browser with one
+editor. Lay out images and text, then export — a print-ready PDF for zines, or a
+zip of 4:5 images for carousels.
 
 Inspired by [dirtylittlezine](https://dirtylittlezine.com/), but built around a
 proper saddle-stitch booklet so you can choose your own page count.
+
+Pick a project type when you start a new draft:
+
+- **Zine (booklet):** half-letter pages folded in half, exported as an imposed
+  double-sided PDF — print, fold, staple.
+- **Instagram carousel:** 4:5 slides (1080×1350), exported as a numbered zip of
+  PNGs, with seamless panoramas that span multiple slides.
 
 ## What it does
 
 - **Half-letter booklet format.** Each 8.5×11" sheet, folded in half, makes four
   5.5×8.5" pages. Page count is any multiple of 4 (4–64).
-- **One image per page**, with fit (fill / fit / stretch), quarter-turn
-  rotation, horizontal/vertical flip, zoom (scroll) and drag-to-reposition.
+- **Open-book spread editor.** Edit two facing pages side by side, the way the
+  folded booklet actually reads — cover alone, then 2–3, 4–5, … with the back
+  cover alone. Click either page to edit it; flip spreads with the arrows.
+- **Image layouts per page** — single, 2-up (across or stacked), 3-up, or a
+  2×2 grid — with an adjustable gap. Each cell has its own fit (fill / fit /
+  stretch), quarter-turn rotation, flip, zoom (scroll) and drag-to-reposition.
+- **Spread images** — span one image across two facing pages, or wrap a
+  landscape photo around the front and back covers. It's split into matching
+  halves that line up across the fold when the booklet is assembled.
+- **Instagram carousels** — a second project type: arrange 4:5 slides, add text
+  and layouts, and span a single photo across several slides for a seamless
+  swipe. Exports a zip of numbered 1080×1350 PNGs.
 - **Text & captions** placed anywhere on a page — drag to move, double-click to
   edit. Pick a font, size, color, alignment, optional highlight background, and
   a little rotation. Text can sit over an image.
+- **Centering tools** — one click to center text horizontally, vertically, or
+  both; images have a Center button too.
 - **Fonts with personality:** Helvetica / Times / Courier plus bundled display
   faces (Anton, Archivo Black, Bebas Neue, Lobster, Permanent Marker, Special
   Elite). All are embedded into the exported PDF.
@@ -24,8 +43,15 @@ proper saddle-stitch booklet so you can choose your own page count.
 - **Print-ready PDF export** with correct saddle-stitch imposition: pages are
   arranged two-up on landscape sheets in fold order. Choose draft/standard/high
   quality and a fold-guide line.
-- **Runs entirely in the browser.** Your images never leave your machine. Work
-  autosaves locally (IndexedDB); you can also Save/Open a project file.
+- **Undo / redo** for every edit (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z), with rapid
+  changes like dragging coalesced into single steps.
+- **Multiple drafts.** Keep several zines in the browser, switch between them,
+  rename, duplicate, and delete. The current draft autosaves as you work.
+- **Touch / iPad friendly.** Works with touch on iPad Pro (Chrome): drag to
+  move, pinch to zoom an image, and the browser won't zoom out from under you.
+- **Runs entirely in the browser.** Your images never leave your machine.
+  Drafts are stored locally (IndexedDB); you can also export/import a project
+  file for backup or sharing.
 
 ## Printing your zine
 
@@ -43,7 +69,12 @@ npm install
 npm run dev      # start the dev server
 npm run build    # type-check + production build into dist/
 npm run preview  # serve the production build locally
+npm test         # run the imposition tests
 ```
+
+The imposition is covered by `src/lib/imposition.test.ts`, which checks the
+page pairing against the textbook saddle-stitch tables and simulates folding
+the printed sheets to confirm the assembled booklet reads 1, 2, 3 … in order.
 
 Requirements: Node 20+ (developed on Node 22).
 
@@ -67,12 +98,16 @@ src/
   store.ts            # Zustand store (document + assets + selection)
   lib/
     constants.ts      # page/sheet dimensions in PDF points
-    imposition.ts     # saddle-stitch booklet page ordering
+    dims.ts           # per-kind frame sizes (zine page vs 4:5 carousel)
+    imposition.ts     # saddle-stitch booklet page ordering (for printing)
+    spreads.ts        # reader spreads for the open-book editor
+    carouselExport.ts # render 4:5 slides to a zip of PNGs
     render.ts         # shared image-slot compositing (editor + PDF)
     pdf.ts            # PDF export (pdf-lib + fontkit), loaded on demand
     fonts.ts          # font registry (standard + embedded)
     image.ts          # image import / downscale / encode
-    storage.ts        # IndexedDB autosave
+    storage.ts        # IndexedDB draft storage
+    history.ts        # undo/redo controller
   components/         # editor UI (page list, canvas, inspector, export)
 ```
 

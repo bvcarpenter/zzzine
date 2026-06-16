@@ -1,31 +1,20 @@
-import { useRef, useState } from "react";
-import { Download, FilePlus2, FolderOpen, Save } from "lucide-react";
+import { useState } from "react";
+import { Download, FolderOpen, Redo2, Undo2 } from "lucide-react";
 import { useZine } from "../store";
+import { undo, redo, useHistory } from "../lib/history";
 import { Button } from "./ui";
 import { ExportDialog } from "./ExportDialog";
-import { downloadProjectFile, readProjectFile } from "../lib/projectFile";
+import { DraftsDialog } from "./DraftsDialog";
 
 export function TopBar() {
   const title = useZine((s) => s.doc.title);
   const setTitle = useZine((s) => s.setTitle);
-  const doc = useZine((s) => s.doc);
-  const assets = useZine((s) => s.assets);
-  const hydrate = useZine((s) => s.hydrate);
-  const newProject = useZine((s) => s.newProject);
+  const kind = useZine((s) => s.doc.kind);
+  const canUndo = useHistory((s) => s.canUndo);
+  const canRedo = useHistory((s) => s.canRedo);
 
   const [showExport, setShowExport] = useState(false);
-  const openRef = useRef<HTMLInputElement>(null);
-
-  const onOpen = async (file: File | undefined) => {
-    if (!file) return;
-    try {
-      const { doc: d, assets: a } = await readProjectFile(file);
-      hydrate(d, a);
-    } catch {
-      alert("That file is not a valid zzzine project.");
-    }
-    if (openRef.current) openRef.current.value = "";
-  };
+  const [showDrafts, setShowDrafts] = useState(false);
 
   return (
     <header className="flex items-center gap-3 border-b border-neutral-800 bg-neutral-950 px-4 py-2">
@@ -44,38 +33,38 @@ export function TopBar() {
       />
 
       <div className="ml-auto flex items-center gap-2">
-        <input
-          ref={openRef}
-          type="file"
-          accept=".json,application/json"
-          className="hidden"
-          onChange={(e) => onOpen(e.target.files?.[0])}
-        />
-        <Button
-          variant="ghost"
-          onClick={() => {
-            if (confirm("Start a new zine? Unsaved changes will be lost."))
-              newProject();
-          }}
-        >
-          <FilePlus2 size={15} />
-          New
-        </Button>
-        <Button variant="ghost" onClick={() => openRef.current?.click()}>
+        <div className="mr-1 flex items-center gap-1">
+          <Button
+            variant="ghost"
+            disabled={!canUndo}
+            onClick={undo}
+            title="Undo (Ctrl/Cmd+Z)"
+            className="!px-2"
+          >
+            <Undo2 size={16} />
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!canRedo}
+            onClick={redo}
+            title="Redo (Ctrl/Cmd+Shift+Z)"
+            className="!px-2"
+          >
+            <Redo2 size={16} />
+          </Button>
+        </div>
+        <Button variant="ghost" onClick={() => setShowDrafts(true)}>
           <FolderOpen size={15} />
-          Open
-        </Button>
-        <Button variant="ghost" onClick={() => downloadProjectFile(doc, assets)}>
-          <Save size={15} />
-          Save
+          Drafts
         </Button>
         <Button variant="primary" onClick={() => setShowExport(true)}>
           <Download size={15} />
-          Export PDF
+          {kind === "carousel" ? "Export ZIP" : "Export PDF"}
         </Button>
       </div>
 
       {showExport && <ExportDialog onClose={() => setShowExport(false)} />}
+      {showDrafts && <DraftsDialog onClose={() => setShowDrafts(false)} />}
     </header>
   );
 }
