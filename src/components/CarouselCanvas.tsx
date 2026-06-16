@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useElementSize } from "../hooks/useElementSize";
 import { ImageItemView } from "./ImageItemView";
 import { TextBlockView } from "./TextBlockView";
@@ -33,6 +34,39 @@ export function CarouselCanvas() {
 
   const assetFor = (id: string) => assets.find((a) => a.id === id) ?? null;
 
+  const [snap, setSnap] = useState<{ xs: number[]; ys: number[] }>({
+    xs: [],
+    ys: [],
+  });
+
+  // Vertical intervals (0..1) of a cut line at fraction `xc` that lie over a
+  // photo — drawn light so the separator stays visible; the rest is dark grey.
+  const coveredIntervals = (xc: number): [number, number][] => {
+    const ivs = artboard.items
+      .filter((it) => it.x <= xc && xc <= it.x + it.w)
+      .map((it) => [Math.max(0, it.y), Math.min(1, it.y + it.h)] as [number, number])
+      .filter(([a, b]) => b > a)
+      .sort((a, b) => a[0] - b[0]);
+    const merged: [number, number][] = [];
+    for (const iv of ivs) {
+      const last = merged[merged.length - 1];
+      if (!last || iv[0] > last[1]) merged.push([iv[0], iv[1]]);
+      else last[1] = Math.max(last[1], iv[1]);
+    }
+    return merged;
+  };
+
+  const gapIntervals = (covered: [number, number][]): [number, number][] => {
+    const gaps: [number, number][] = [];
+    let cursor = 0;
+    for (const [a, b] of covered) {
+      if (a > cursor) gaps.push([cursor, a]);
+      cursor = Math.max(cursor, b);
+    }
+    if (cursor < 1) gaps.push([cursor, 1]);
+    return gaps;
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-neutral-900">
       <div className="border-b border-neutral-800 px-4 py-2 text-center text-sm font-medium text-neutral-300">
@@ -57,6 +91,9 @@ export function CarouselCanvas() {
                   canvasW={canvasW}
                   canvasH={canvasH}
                   selected={it.id === selectedItemId}
+                  siblings={artboard.items.filter((o) => o.id !== it.id)}
+                  slideCount={slideCount}
+                  onSnapChange={(xs, ys) => setSnap({ xs, ys })}
                 />
               ))}
 
@@ -74,15 +111,56 @@ export function CarouselCanvas() {
                 />
               ))}
 
-              {/* slide-cut guides */}
-              {Array.from({ length: slideCount - 1 }, (_, k) => k + 1).map((k) => (
+              {/* slide-cut guides: dark grey, but light where over a photo */}
+              {Array.from({ length: slideCount - 1 }, (_, k) => k + 1).map((k) => {
+                const xc = k / slideCount;
+                const covered = coveredIntervals(xc);
+                const gaps = gapIntervals(covered);
+                return (
+                  <div
+                    key={k}
+                    className="pointer-events-none absolute bottom-0 top-0"
+                    style={{ left: k * slideW }}
+                  >
+                    {gaps.map(([a, b], i) => (
+                      <div
+                        key={`g${i}`}
+                        className="absolute"
+                        style={{
+                          top: a * canvasH,
+                          height: (b - a) * canvasH,
+                          borderLeft: "2px dashed #4b5563",
+                        }}
+                      />
+                    ))}
+                    {covered.map(([a, b], i) => (
+                      <div
+                        key={`c${i}`}
+                        className="absolute"
+                        style={{
+                          top: a * canvasH,
+                          height: (b - a) * canvasH,
+                          borderLeft: "2px dashed rgba(255,255,255,0.75)",
+                        }}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
+
+              {/* alignment snap guides */}
+              {snap.xs.map((x, i) => (
                 <div
-                  key={k}
-                  className="pointer-events-none absolute bottom-0 top-0"
-                  style={{
-                    left: k * slideW,
-                    borderLeft: "2px dashed rgba(255,255,255,0.55)",
-                  }}
+                  key={`sx${i}`}
+                  className="pointer-events-none absolute bottom-0 top-0 z-20"
+                  style={{ left: x * canvasW, borderLeft: "1px solid #a78bfa" }}
+                />
+              ))}
+              {snap.ys.map((y, i) => (
+                <div
+                  key={`sy${i}`}
+                  className="pointer-events-none absolute left-0 right-0 z-20"
+                  style={{ top: y * canvasH, borderTop: "1px solid #a78bfa" }}
                 />
               ))}
             </div>
