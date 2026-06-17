@@ -18,11 +18,15 @@ import { roundUpToSheet } from "./lib/imposition";
 import { cellCount } from "./lib/layout";
 import { buildSpreads } from "./lib/spreads";
 import { migrateZine } from "./lib/migrate";
+import { movePagesByIndices } from "./lib/reorder";
 
 interface ZineState {
   doc: Zine;
   assets: Asset[];
   selectedPageIndex: number;
+  /** Pages selected for group operations (resequencing). Includes the active
+   *  page; length 1 in the common case. */
+  selectedPages: number[];
   /** Active image cell within the selected page. */
   selectedCellIndex: number;
   selectedTextId: string | null;
@@ -62,7 +66,7 @@ interface ZineState {
   setItemAspect: (id: string, aspect: number | null) => void;
 
   // --- selection ---
-  selectPage: (index: number) => void;
+  selectPage: (index: number, mode?: "single" | "toggle" | "range") => void;
   selectCell: (cellIndex: number) => void;
   focusCell: (index: number, cellIndex: number) => void;
   selectText: (id: string | null) => void;
@@ -77,6 +81,8 @@ interface ZineState {
   /** Span an image across `count` consecutive carousel frames from `start`. */
   setCarouselSpan: (start: number, count: number) => void;
   movePage: (from: number, to: number) => void;
+  /** Move all currently selected pages together by one slot (resequencing). */
+  movePagesBy: (direction: -1 | 1) => void;
 
   // --- assets / cells ---
   addAsset: (asset: Asset) => void;
@@ -168,6 +174,7 @@ export const useZine = create<ZineState>((set) => ({
   doc: createDoc("zine"),
   assets: [],
   selectedPageIndex: 0,
+  selectedPages: [0],
   selectedCellIndex: 0,
   selectedTextId: null,
   selectedItemId: null,
@@ -180,6 +187,7 @@ export const useZine = create<ZineState>((set) => ({
       doc: migrateZine(doc),
       assets,
       selectedPageIndex: 0,
+      selectedPages: [0],
       selectedCellIndex: 0,
       selectedTextId: null,
       selectedItemId: null,
@@ -191,6 +199,7 @@ export const useZine = create<ZineState>((set) => ({
       doc: createDoc(kind),
       assets: [],
       selectedPageIndex: 0,
+      selectedPages: [0],
       selectedCellIndex: 0,
       selectedTextId: null,
       selectedItemId: null,
@@ -204,6 +213,7 @@ export const useZine = create<ZineState>((set) => ({
       doc,
       assets,
       selectedPageIndex: Math.min(s.selectedPageIndex, doc.pages.length - 1),
+      selectedPages: [Math.min(s.selectedPageIndex, doc.pages.length - 1)],
       selectedCellIndex: 0,
       selectedTextId: null,
       selectedItemId: null,
@@ -361,6 +371,7 @@ export const useZine = create<ZineState>((set) => ({
       return {
         doc: { ...s.doc, pages },
         selectedPageIndex,
+        selectedPages: [selectedPageIndex],
         selectedCellIndex: 0,
         selectedTextId: null,
         revision: s.revision + 1,
@@ -374,6 +385,7 @@ export const useZine = create<ZineState>((set) => ({
       return {
         doc: { ...s.doc, pages },
         selectedPageIndex: pages.length - 1,
+        selectedPages: [pages.length - 1],
         selectedCellIndex: 0,
         selectedTextId: null,
         revision: s.revision + 1,
@@ -385,9 +397,11 @@ export const useZine = create<ZineState>((set) => ({
       if (s.doc.pages.length <= MIN_SLIDES) return s;
       // Removing shifts indices, which would break position-based spans.
       const pages = clearAllSpans(s.doc.pages).filter((_, i) => i !== index);
+      const selectedPageIndex = Math.min(s.selectedPageIndex, pages.length - 1);
       return {
         doc: { ...s.doc, pages },
-        selectedPageIndex: Math.min(s.selectedPageIndex, pages.length - 1),
+        selectedPageIndex,
+        selectedPages: [selectedPageIndex],
         selectedCellIndex: 0,
         selectedTextId: null,
         revision: s.revision + 1,
@@ -400,12 +414,30 @@ export const useZine = create<ZineState>((set) => ({
       revision: s.revision + 1,
     })),
 
-  selectPage: (index) =>
-    set({
-      selectedPageIndex: index,
-      selectedCellIndex: 0,
-      selectedTextId: null,
-      selectedItemId: null,
+  selectPage: (index, mode = "single") =>
+    set((s) => {
+      let selectedPages: number[];
+      if (mode === "toggle") {
+        const has = s.selectedPages.includes(index);
+        const next = has
+          ? s.selectedPages.filter((i) => i !== index)
+          : [...s.selectedPages, index];
+        selectedPages = next.length ? next : [index];
+      } else if (mode === "range") {
+        const anchor = s.selectedPageIndex;
+        const lo = Math.min(anchor, index);
+        const hi = Math.max(anchor, index);
+        selectedPages = Array.from({ length: hi - lo + 1 }, (_, k) => lo + k);
+      } else {
+        selectedPages = [index];
+      }
+      return {
+        selectedPageIndex: index,
+        selectedPages,
+        selectedCellIndex: 0,
+        selectedTextId: null,
+        selectedItemId: null,
+      };
     }),
 
   selectCell: (cellIndex) => set({ selectedCellIndex: cellIndex }),
@@ -555,6 +587,28 @@ export const useZine = create<ZineState>((set) => ({
       return {
         doc: { ...s.doc, pages: base },
         selectedPageIndex: to,
+        selectedPages: [to],
+        revision: s.revision + 1,
+      };
+    }),
+
+  movePagesBy: (direction) =>
+    set((s) => {
+      const result = movePagesByIndices(
+        s.doc.pages.length,
+        s.selectedPages,
+        direction,
+      );
+      if (!result) return s;
+      const base =
+        s.doc.kind === "carousel" ? clearAllSpans(s.doc.pages) : s.doc.pages;
+      const pages = result.order.map((i) => base[i]);
+      const sel = [...s.selectedPages].sort((a, b) => a - b);
+      const rank = Math.max(0, sel.indexOf(s.selectedPageIndex));
+      return {
+        doc: { ...s.doc, pages },
+        selectedPages: result.selected,
+        selectedPageIndex: result.insertAt + rank,
         revision: s.revision + 1,
       };
     }),
